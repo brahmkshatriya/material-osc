@@ -16,9 +16,18 @@ jobs:
       - name: Check out the tagged revision
         uses: actions/checkout@v4
 
+      - name: Build release archive
+        shell: bash
+        run: |
+          python3 bundle.py "$GITHUB_REF_NAME"
+          cd "build/$GITHUB_REF_NAME"
+          zip -r "$GITHUB_WORKSPACE/material-osc-$GITHUB_REF_NAME.zip" \
+            material-osc.lua fonts
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v3
         with:
           name: ${{ github.ref_name }}
           body_path: INSTALLATION.md
           generate_release_notes: true
+          files: material-osc-${{ github.ref_name }}.zip
