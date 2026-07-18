@@ -25,7 +25,7 @@ jobs:
           python3 bundle.py "$GITHUB_REF_NAME"
           cd "build/$GITHUB_REF_NAME"
           zip -r "$GITHUB_WORKSPACE/material-osc-$GITHUB_REF_NAME.zip" \
-            material-osc.lua fonts
+            material-osc.lua material-osc
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v3
