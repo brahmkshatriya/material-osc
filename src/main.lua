@@ -4,6 +4,9 @@ local opts = {
   always_visible = false,
   thumbnails = true,
   network_thumbnails = true,
+  thumbnail_mpv_path = "mpv",
+  directory_playlist = true,
+  directory_playlist_sort = "newest",
   tooltip = true,
   dpi_scale = "auto",
   accent_color = "#00bbff",
@@ -40,35 +43,49 @@ local tooltip_service_module = require "src.ui.tooltip_service"
 local snapshot_module = require "src.services.snapshot"
 local assets = require "src.services.assets"
 local player_module = require "src.services.player"
+local directory_playlist_module = require "src.services.directory_playlist"
 local stream_quality_module = require "src.services.stream_quality"
 local subtitle_loader_module = require "src.services.subtitle_loader"
 local thumbnail_module = require "src.services.thumbnail_service"
 
 mp.set_property("osc", "no")
+mp.set_property_bool("auto-window-resize", false)
 
 local controls_module = require "src.ui.components.controls"
 local popups_module = require "src.ui.components.popups"
+local playlist_module = require "src.ui.components.playlist"
 
 local function create_app(services)
   local state, ui = services.state, services.ui
   local controls, popups = controls_module.new(services), popups_module.new(services)
-  local node = {}
+  local node = {no_video_since = nil, no_video_opacity = 0}
   node.video = controls.VideoSurface()
+  node.playlist_controls = playlist_module.new(services)
   node.seekbar = controls.SeekBar()
   node.controls = controls.ControlsRow()
   node.controller = ui.Column({
     modifier = ui.Modifier():fillMaxWidth():padding({all = ui.dp(12)}):align({
       horizontal = "starting", vertical = "bottom"
     }):pointerArea({name = "controller-area"}),
-    children = {node.seekbar, node.controls}
+    children = {node.playlist_controls, node.seekbar, node.controls}
   })
   node.tooltip = controls.TooltipHost()
   node.chapter = popups.ChapterDialogHost()
   node.settings = popups.SettingsDialogHost()
 
   function node:update(snapshot)
+    if snapshot.video_present or state.media.loading then
+      self.no_video_since = nil
+      self.no_video_opacity = 0
+    else
+      self.no_video_since = self.no_video_since or mp.get_time()
+      local elapsed = mp.get_time() - self.no_video_since
+      self.no_video_opacity = ui.clamp((elapsed - 0.12) / 0.28, 0, 1) * 0.66
+    end
     self.controls:update(snapshot)
-    local modal = state.chapter.open or state.chapter.animation.value > 0.001 or
+    self.playlist_controls:update(snapshot)
+    local modal = state.playlist.open or state.playlist.animation:is_running() or
+      state.chapter.open or state.chapter.animation.value > 0.001 or
       state.settings.open or state.settings.animation.value > 0.001
     self.tooltip:set_suppressed(state.controller.opacity.value <= 0 or modal)
     self.chapter:update(snapshot)
@@ -77,13 +94,22 @@ local function create_app(services)
 
   function node:draw(ass, root)
     ui.draw_node(self.video, ass, root)
+    if self.no_video_opacity > 0 then
+      local icon_size = math.min(root.w, root.h) * 0.34 / ui.dp(1)
+      services.ui.draw_icon(ass, root.x + root.w / 2, root.y + root.h / 2,
+        "music_note", "#FFFFFF", icon_size,
+        services.ui.alpha(self.no_video_opacity), true)
+    end
     if state.snapshot.buffering then services.loading.draw(ass) end
     services.playback_indicator:draw(ass, root)
 
+    local playlist_visible = state.playlist.open or state.playlist.animation:is_running()
     local chapter_visible = state.chapter.open or state.chapter.animation.value > 0.001
     local settings_visible = state.settings.open or state.settings.animation.value > 0.001
     local pointer_x, pointer_y = state.pointer.x, state.pointer.y
-    if chapter_visible or settings_visible then state.pointer.x, state.pointer.y = -1, -1 end
+    if playlist_visible or chapter_visible or settings_visible then
+      state.pointer.x, state.pointer.y = -1, -1
+    end
     if state.controller.opacity.value > 0 then
       state.controller.bounds = ui.draw_node(self.controller, ass, root)
     else
@@ -93,7 +119,8 @@ local function create_app(services)
     state.pointer.x, state.pointer.y = pointer_x, pointer_y
 
     ui.draw_node(self.tooltip, ass, root)
-    if chapter_visible then ui.draw_node(self.chapter, ass, root)
+    if playlist_visible then self.playlist_controls:draw_expanded(ass, root)
+    elseif chapter_visible then ui.draw_node(self.chapter, ass, root)
     elseif settings_visible then ui.draw_node(self.settings, ass, root) end
   end
 
@@ -124,6 +151,7 @@ local clamp = function(value, minimum, maximum)
   return ui_renderer:clamp(value, minimum, maximum)
 end
 local dp = function(value) return ui_renderer:dp(value) end
+mp.set_property("geometry", "x66%")
 
 local text_metrics = text_metrics_module.new({dp = dp, default_size = 24})
 local truncate_utf8 = text_metrics.truncate
@@ -154,6 +182,7 @@ local navigation = navigation_module.new({
   render = function() if render then render() end end
 })
 local function set_chapter_dialog_open(open) navigation:set_dialog_open("chapter", open) end
+local function set_playlist_dialog_open(open) navigation:set_dialog_open("playlist", open) end
 local function set_subtitle_dialog_open(open) navigation:set_dialog_open("subtitle", open) end
 local function set_audio_dialog_open(open) navigation:set_dialog_open("audio", open) end
 local function set_settings_dialog_open(open) navigation:set_dialog_open("settings", open) end
@@ -172,6 +201,9 @@ local stream_quality = stream_quality_module.new({
   render = function(...) return render(...) end,
   set_settings_page = set_settings_page
 })
+local directory_playlist = directory_playlist_module.new({
+  mp = mp, utils = utils, opts = opts
+})
 local function select_stream_quality(item) stream_quality:select(item) end
 local function attach_ytdl_caption(item) stream_quality:attach_caption(item) end
 
@@ -180,8 +212,10 @@ local is_buffering = function() return player:is_buffering() end
 local preview_seek_to_mouse = function(box) return player:preview_seek(box) end
 
 local draw_box = function(...) return ui_renderer:draw_box(...) end
+local draw_round_box = function(...) return ui_renderer:draw_round_box(...) end
 local draw_rect = function(...) return ui_renderer:draw_rect(...) end
 local draw_text = function(...) return ui_renderer:draw_text(...) end
+local draw_shadowed_text = function(...) return ui_renderer:draw_shadowed_text(...) end
 local draw_icon = function(...) return ui_renderer:draw_icon(...) end
 
 local draw_loading_shape_morph = loading_indicator.new({
@@ -203,7 +237,6 @@ thumbnail_service, draw_thumbnail_preview = thumbnail_module.new({
   get_snapshot = function() return runtime.snapshot end,
   opts = opts, utils = utils, msg = msg, dp = dp, clamp = clamp,
   format_time = format_time, chapter_name_at = chapter_name_at,
-  get_script_dir = function() return asset_paths.script_dir end,
   enqueue_effect = enqueue_effect,
   render = function(...) return render(...) end,
   draw_box = function(...) return draw_box(...) end,
@@ -254,7 +287,9 @@ local services = {
   ui = {
     dp = dp, clamp = clamp, smooth_step = smooth_step, lerp = lerp,
     alpha = ass_alpha_for_opacity, draw_rect = draw_rect, draw_box = draw_box,
+    draw_round_box = draw_round_box,
     draw_icon = draw_icon, draw_text = draw_text, draw_seekbar = draw_seekbar,
+    draw_shadowed_text = draw_shadowed_text,
     draw_loading = draw_loading_shape_morph, mouse_in = mouse_in,
     truncate_utf8 = truncate_utf8, format_time = format_time,
     text_width = text_intrinsic_width,
@@ -273,6 +308,7 @@ local services = {
     attach_ytdl_caption = attach_ytdl_caption
   },
   navigation = {
+    set_playlist_open = set_playlist_dialog_open,
     set_chapter_open = set_chapter_dialog_open,
     set_subtitle_open = set_subtitle_dialog_open,
     set_audio_open = set_audio_dialog_open,
@@ -306,6 +342,7 @@ local runtime_host = mpv_runtime_module.new({
   state = runtime, mp = mp, navigation = navigation,
   playback_indicator = playback_indicator,
   thumbnail = thumbnail_service, stream_quality = stream_quality,
+  directory_playlist = directory_playlist,
   controller = function() return controller end,
   render = function() render() end
 })
@@ -313,6 +350,7 @@ local function handle_snapshot(snapshot, now)
   playback_indicator:observe(snapshot, now)
   if #snapshot.chapters == 0 then runtime.chapter.open = false end
   if #snapshot.audio_items < 2 then runtime.audio.open = false end
+  if snapshot.playlist_count == 0 then runtime.playlist.open = false end
 end
 
 local renderer = frame_runtime.renderer.new({

@@ -268,8 +268,11 @@ function compose.new(deps)
   local function IconButton(args)
     local node = {
       icon = args.icon,
+      transition_icon = args.transition_icon,
+      transition_progress = args.transition_progress or 0,
       tooltip = args.tooltip,
       size = args.size or icon_text_size,
+      alpha = args.alpha,
       enabled = args.enabled ~= false,
       on_click = args.on_click,
       on_scroll_up = args.on_scroll_up,
@@ -292,6 +295,13 @@ function compose.new(deps)
 
     function node:update(props)
       if props.icon ~= nil then self.icon = props.icon end
+      if props.transition_icon ~= nil or props.clear_transition_icon then
+        self.transition_icon = props.transition_icon
+      end
+      if props.transition_progress ~= nil then
+        self.transition_progress = props.transition_progress
+      end
+      if props.alpha ~= nil then self.alpha = props.alpha end
       if props.tooltip ~= nil or props.clear_tooltip then self.tooltip = props.tooltip end
       if props.enabled ~= nil then
         self.enabled = props.enabled
@@ -306,8 +316,28 @@ function compose.new(deps)
     end
 
     function node:draw(ass, bounds)
-      draw_icon(ass, bounds.x + bounds.w / 2, bounds.y + bounds.h / 2,
-            self.icon, "#FFFFFF", self.size)
+      local icon_alpha = self.alpha
+      if not self.enabled then
+        local transition_alpha = tonumber(icon_alpha or "00", 16) or 0
+        icon_alpha = string.format("%02X",
+          math.floor(255 - (255 - transition_alpha) * 0.4 + 0.5))
+      end
+      local center_x, center_y = bounds.x + bounds.w / 2, bounds.y + bounds.h / 2
+      if self.transition_icon then
+        local progress = math.max(0, math.min(1, self.transition_progress or 0))
+        local opacity = 1 - (tonumber(icon_alpha or "00", 16) or 0) / 255
+        local function faded_alpha(fraction)
+          return string.format("%02X",
+            math.floor(255 - 255 * opacity * fraction + 0.5))
+        end
+        draw_icon(ass, center_x, center_y, self.icon, "#FFFFFF", self.size,
+          faded_alpha(1 - progress))
+        draw_icon(ass, center_x, center_y, self.transition_icon, "#FFFFFF", self.size,
+          faded_alpha(progress))
+      else
+        draw_icon(ass, center_x, center_y, self.icon, "#FFFFFF", self.size,
+          icon_alpha)
+      end
       if self.tooltip and self.enabled and mouse_in(bounds) then
         request_tooltip(self.tooltip, bounds)
       end

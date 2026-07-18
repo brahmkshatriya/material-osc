@@ -15,7 +15,7 @@ mpv/
 ├── mpv.conf (optional)
 └── scripts/
     ├── material-osc.lua
-    └── fonts/
+    └── material-osc/
         ├── GoogleSansFlex.ttf
         └── MaterialSymbolsRoundedUnfilled.ttf
 ```
@@ -24,4 +24,5 @@ For smoother rendering, add this to `mpv.conf`:
 
 ```conf
 video-sync=display-resample
+force-window=yes
 ```

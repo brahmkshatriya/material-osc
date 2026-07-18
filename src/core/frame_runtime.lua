@@ -81,7 +81,7 @@ function render_orchestrator.new(args)
     local modal_visible = false
     for _, name in ipairs(args.navigation.dialogs) do
       local state = runtime[name]
-      modal_visible = modal_visible or state.open or state.animation.value > 0.001
+      modal_visible = modal_visible or state.open or state.animation:is_running()
     end
     args.tooltip:finalize(now, runtime.controller.opacity.value <= 0 or modal_visible)
 

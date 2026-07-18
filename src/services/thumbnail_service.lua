@@ -10,7 +10,6 @@ function thumbnail_worker.new(deps)
   local clamp = deps.clamp
   local format_time = deps.format_time
   local chapter_name_at = deps.chapter_name_at
-  local get_script_dir = deps.get_script_dir
   local enqueue_effect = deps.enqueue_effect
   local render = deps.render
   local draw_box = deps.draw_box
@@ -162,7 +161,9 @@ function thumbnail_worker.new(deps)
     end
 
     self:close_worker_command_file()
-    if thumbnail.worker_socket then os.remove(thumbnail.worker_socket) end
+    if thumbnail.worker_socket and not thumbnail_is_windows then
+      os.remove(thumbnail.worker_socket)
+    end
     if thumbnail.worker_command_file then os.remove(thumbnail.worker_command_file) end
     if thumbnail.worker_client_script then os.remove(thumbnail.worker_client_script) end
     if thumbnail.worker_output then os.remove(thumbnail.worker_output) end
@@ -256,11 +257,24 @@ function thumbnail_worker.new(deps)
 
   function thumbnail_service:write_socket_command(pos, mode)
     local socket = state.worker_socket
-    if not socket or not utils.file_info(socket) then return false end
+    if not socket then return false end
     local json = utils.format_json({
       command = {"seek", pos, mode},
       async = true
     })
+    if thumbnail_is_windows then
+      local pipe_path = "\\\\.\\pipe\\" .. socket
+      local handle = io.open(pipe_path, "r+b")
+      if not handle then return false end
+      local ok = pcall(function()
+        handle:write(json .. "\n")
+        handle:flush()
+        handle:close()
+      end)
+      if not ok then pcall(function() handle:close() end) end
+      return ok
+    end
+    if not utils.file_info(socket) then return false end
     mp.command_native_async({
       name = "subprocess",
       playback_only = false,
@@ -297,11 +311,38 @@ function thumbnail_worker.new(deps)
       self:remove_display_file()
     end
 
+    local thumbnail_dir
+    if thumbnail_is_windows then
+      local temp_root = os.getenv("TEMP") or os.getenv("TMP") or "."
+      thumbnail_dir = utils.join_path(temp_root, "material-osc")
+    else
+      thumbnail_dir = "/tmp/material-osc"
+    end
+    local mkdir_args
+    if thumbnail_is_windows then
+      mkdir_args = {"cmd", "/c", "mkdir", thumbnail_dir}
+    else
+      mkdir_args = {"mkdir", "-p", thumbnail_dir}
+    end
+    if not utils.file_info(thumbnail_dir) then
+      local mkdir_result = mp.command_native({
+        name = "subprocess", playback_only = false,
+        capture_stderr = true, args = mkdir_args
+      })
+      if not mkdir_result or mkdir_result.status ~= 0 then
+        msg.error("Could not create thumbnail directory: " .. thumbnail_dir)
+        return false
+      end
+    end
+
     local pid = mp.get_property("pid", "0")
-    local base = "/tmp/material-osc-thumbnail-" .. pid
-    thumbnail.worker_socket = base .. ".sock"
-    thumbnail.worker_command_file = base .. ".commands"
-    thumbnail.worker_client_script = base .. ".run"
+    local base = utils.join_path(thumbnail_dir, "thumbnail-" .. pid)
+    thumbnail.worker_socket = thumbnail_is_windows and
+      ("material-osc-thumbnail-" .. pid) or (base .. ".sock")
+    thumbnail.worker_command_file = not thumbnail_is_windows and
+      (base .. ".commands") or nil
+    thumbnail.worker_client_script = not thumbnail_is_windows and
+      (base .. ".run") or nil
     thumbnail.worker_output = base .. ".work"
     thumbnail.worker_candidate = base .. ".candidate"
     thumbnail.worker_display = base .. ".bgra"
@@ -309,8 +350,8 @@ function thumbnail_worker.new(deps)
     thumbnail.worker_height = height
     thumbnail.worker_source = source
 
-    os.remove(thumbnail.worker_socket)
-    os.remove(thumbnail.worker_command_file)
+    if not thumbnail_is_windows then os.remove(thumbnail.worker_socket) end
+    if thumbnail.worker_command_file then os.remove(thumbnail.worker_command_file) end
     os.remove(thumbnail.worker_output)
     os.remove(thumbnail.worker_candidate)
     if not keep_display then os.remove(thumbnail.worker_display) end
@@ -338,8 +379,15 @@ function thumbnail_worker.new(deps)
     local filter = string.format(
       "scale=w=%d:h=%d:force_original_aspect_ratio=decrease," ..
       "pad=w=%d:h=%d:x=-1:y=-1,format=bgra", width, height, width, height)
+    local mpv_path = opts.thumbnail_mpv_path or "mpv"
+    if thumbnail_is_windows and mpv_path == "mpv" then
+      local frontend_path = mp.get_property_native("user-data/frontend/process-path")
+      if type(frontend_path) == "string" and frontend_path ~= "" then
+        mpv_path = frontend_path
+      end
+    end
     local args = {
-      "mpv", "--no-config", "--msg-level=all=no", "--really-quiet",
+      mpv_path, "--no-config", "--msg-level=all=no", "--really-quiet",
       "--no-terminal", "--load-scripts=no", "--osc=no", "--ytdl=no",
       "--load-stats-overlay=no", "--load-osd-console=no",
       "--load-auto-profiles=no", "--idle=yes", "--pause=yes",

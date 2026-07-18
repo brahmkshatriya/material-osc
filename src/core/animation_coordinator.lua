@@ -6,7 +6,8 @@ function animation_coordinator.new(args)
 
   function service:update(now)
     runtime.controller.opacity:update(now)
-    local modal = runtime.chapter.open or runtime.chapter.animation.value > 0.001 or
+    local modal = runtime.playlist.open or runtime.playlist.animation:is_running() or
+      runtime.chapter.open or runtime.chapter.animation.value > 0.001 or
       runtime.settings.open or runtime.settings.animation.value > 0.001
     local wants_volume = not modal and (runtime.volume.dragging or
       (runtime.volume.button_bounds and args.mouse_in(runtime.volume.button_bounds)) or
@@ -14,11 +15,13 @@ function animation_coordinator.new(args)
     runtime.volume.animation:set_target(wants_volume and 1 or 0)
     runtime.volume.animation:update(now)
 
-    for _, name in ipairs({"chapter", "subtitle", "audio", "settings"}) do
+    for _, name in ipairs({"playlist", "chapter", "subtitle", "audio", "settings"}) do
       local state = runtime[name]
       state.animation:set_target(state.open and 1 or 0)
       state.animation:update(now)
     end
+    runtime.playlist.width_animation:update(now)
+    runtime.playlist.height_animation:update(now)
     runtime.settings.content_animation:update(now)
     runtime.settings.width_animation:update(now)
     runtime.settings.height_animation:update(now)

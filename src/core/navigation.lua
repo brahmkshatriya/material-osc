@@ -1,6 +1,6 @@
 local navigation = {}
 
-local DIALOGS = {"chapter", "subtitle", "audio", "settings"}
+local DIALOGS = {"playlist", "chapter", "subtitle", "audio", "settings"}
 
 function navigation.new(args)
   local runtime, mp = args.runtime, args.mp
@@ -24,6 +24,9 @@ function navigation.new(args)
     runtime.pointer.active = nil
     runtime.seek.dragging = false
     runtime.volume.dragging = false
+    runtime.playlist.drag_from, runtime.playlist.drag_to = nil, nil
+    runtime.playlist.drag_start_y = nil
+    runtime.playlist.dragging_scroll = false
   end
 
   function service:scroll_to_active(state, items, active_id)
@@ -46,12 +49,18 @@ function navigation.new(args)
     local state = runtime[name]
     state.open = open == true
     if name == "chapter" then state.dragging_scroll = false end
+    if name == "playlist" then
+      state.drag_from, state.drag_to, state.drag_start_y = nil, nil, nil
+      state.dragging_scroll = false
+    end
     if state.open then
       self:open(name)
       if name == "subtitle" then
         self:scroll_to_active(state, runtime.snapshot.subtitle_items, runtime.snapshot.subtitle_id)
       elseif name == "audio" then
         self:scroll_to_active(state, runtime.snapshot.audio_items, runtime.snapshot.audio_id)
+      elseif name == "playlist" then
+        state.scroll_index = math.max(0, (runtime.snapshot.playlist_pos or 0) - 2)
       elseif name == "settings" then
         state.page, state.pending_page, state.transition_phase = "root", nil, nil
         state.resize_started = false
@@ -119,6 +128,11 @@ function navigation.new(args)
       mp.disable_key_bindings(self:binding(name))
     end
     runtime.chapter.dragging_scroll = false
+    runtime.playlist.drag_from, runtime.playlist.drag_to = nil, nil
+    runtime.playlist.drag_start_y = nil
+    runtime.playlist.dragging_scroll = false
+    runtime.playlist.width_animation:snap(args.dp(118))
+    runtime.playlist.height_animation:snap(args.dp(42))
     local state = runtime.settings
     state.page, state.pending_page, state.transition_phase = "root", nil, nil
     state.resize_started = false

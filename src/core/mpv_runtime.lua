@@ -43,6 +43,8 @@ function mpv_runtime.new(args)
   end
 
   function service:on_file_loaded()
+    state.media.loading = false
+    args.directory_playlist:load()
     args.navigation:reset()
     args.playback_indicator:reset()
     state.pointer.pending_click = nil
@@ -69,7 +71,10 @@ function mpv_runtime.new(args)
       {"fullscreen", "bool"}, {"seeking", "bool"},
       {"paused-for-cache", "bool"}, {"cache-buffering-state", "number"},
       {"demuxer-cache-state", "native"}, {"vid", "number"},
-      {"video-out-params", "native"}, {"demuxer-via-network", "bool"}
+      {"video-out-params", "native"}, {"demuxer-via-network", "bool"},
+      {"playlist", "native"}, {"playlist-pos", "number"},
+      {"loop-playlist", "string"}, {"loop-file", "string"},
+      {"shuffle", "bool"}, {"media-title", "string"}
     }) do mp.observe_property(property[1], property[2], args.render) end
     mp.observe_property("display-fps", "number", function() self:update_rate() end)
     mp.observe_property("estimated-display-fps", "number", function() self:update_rate() end)
@@ -117,6 +122,14 @@ function mpv_runtime.new(args)
     mp.register_event("playback-restart", function()
       if not state.loading.quality_switching then return end
       state.loading.quality_switching = false
+      args.render()
+    end)
+    mp.register_event("start-file", function()
+      state.media.loading = true
+      args.render()
+    end)
+    mp.register_event("end-file", function()
+      state.media.loading = true
       args.render()
     end)
     mp.register_event("shutdown", function()

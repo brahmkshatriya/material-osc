@@ -21,6 +21,14 @@ function application_state.new(args)
       open = false, scroll_index = 0, bounds = nil,
       dragging_scroll = false, hidden_notified = true
     },
+    playlist = {
+      open = false, scroll_index = 0, bounds = nil, list_bounds = nil,
+      anchor_bounds = nil,
+      drag_from = nil, drag_to = nil, drag_start_y = nil,
+      dragging_scroll = false,
+      shuffled = false, shuffle_initialized = false,
+      hidden_notified = true
+    },
     subtitle = {open = false, scroll_index = 0, bounds = nil, hidden_notified = true},
     audio = {open = false, scroll_index = 0, bounds = nil, hidden_notified = true},
     settings = {
@@ -60,6 +68,7 @@ function application_state.new(args)
     },
     timers = {hide = nil, frame = nil, frame_interval = 1 / 60},
     loading = {started_ms = args.now_ms(), quality_switching = false},
+    media = {loading = true},
     effects = {order = {}, by_key = {}},
     snapshot = {},
     frame = {rendering = false, pending = false}
@@ -70,6 +79,13 @@ function application_state.new(args)
   })
   runtime.volume.animation = animation.spring({initial = 0, stiffness = 360, damping = 24})
   runtime.chapter.animation = animation.spring({initial = 0, stiffness = 380, damping = 26})
+  runtime.playlist.animation = animation.spring({initial = 0, stiffness = 380, damping = 26})
+  runtime.playlist.width_animation = animation.spring({
+    initial = 118, stiffness = 560, damping = 38
+  })
+  runtime.playlist.height_animation = animation.spring({
+    initial = 42, stiffness = 560, damping = 38
+  })
   runtime.subtitle.animation = animation.spring({initial = 0, stiffness = 380, damping = 26})
   runtime.audio.animation = animation.spring({initial = 0, stiffness = 380, damping = 26})
   runtime.settings.animation = animation.spring({initial = 0, stiffness = 380, damping = 26})

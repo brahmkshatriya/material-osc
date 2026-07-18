@@ -648,6 +648,10 @@ function popups.new(services)
         bounds.x2 - margin - popup_size.w)
       local y = clamp(desired_y, bounds.y + margin,
         bounds.y2 - margin - popup_size.h)
+      if args.slide_distance then
+        local slide_progress = clamp(args.state.animation.value, 0, 1.05)
+        y = y + args.slide_distance * (1 - slide_progress)
+      end
       local popup_bounds = Rect({x = x, y = y, w = popup_size.w, h = popup_size.h})
       args.state.bounds = popup_bounds
       draw_node(self.popup, ass, popup_bounds)
@@ -1394,6 +1398,7 @@ function popups.new(services)
     return PopupHost({
       name = "settings-dialog", state = settings_state,
       anchor_name = "settings-button",
+      slide_distance = dp(18),
       on_close = function() set_settings_dialog_open(false) end,
       popup = SettingsPopup(function() set_settings_dialog_open(false) end),
       update_popup = function(popup, snapshot, opacity, interactive)

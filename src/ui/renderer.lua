@@ -54,24 +54,65 @@ function renderer.new(args)
     ass:draw_stop()
   end
 
+  function service:draw_round_box(ass, x1, y1, x2, y2,
+      top_radius, bottom_radius, color, alpha)
+    if x2 <= x1 or y2 <= y1 then return end
+    local width, height = x2 - x1, y2 - y1
+    local maximum = math.min(width / 2, height / 2)
+    local top = self:clamp(top_radius or 0, 0, maximum)
+    local bottom = self:clamp(bottom_radius or top, 0, maximum)
+    local kappa = 0.5522847498
+    ass:new_event(); ass:pos(x1, y1); ass:an(7)
+    ass:append(string.format("{\\1c&H%s&\\1a&H%s&\\bord0\\shad0}",
+      self:ass_color(color), self:fade_alpha(alpha)))
+    ass:draw_start()
+    ass:move_to(top, 0)
+    ass:line_to(width - top, 0)
+    ass:bezier_curve(width - top + top * kappa, 0,
+      width, top - top * kappa, width, top)
+    ass:line_to(width, height - bottom)
+    ass:bezier_curve(width, height - bottom + bottom * kappa,
+      width - bottom + bottom * kappa, height, width - bottom, height)
+    ass:line_to(bottom, height)
+    ass:bezier_curve(bottom - bottom * kappa, height,
+      0, height - bottom + bottom * kappa, 0, height - bottom)
+    ass:line_to(0, top)
+    ass:bezier_curve(0, top - top * kappa,
+      top - top * kappa, 0, top, 0)
+    ass:draw_stop()
+  end
+
   function service:draw_rect(ass, x1, y1, x2, y2, color, alpha)
     if x2 <= x1 or y2 <= y1 then return end
     self:draw_box(ass, x1, y1, x2, y2,
       math.min(x2 - x1, y2 - y1) / 2, color, alpha)
   end
 
-  function service:draw_text(ass, x, y, value, size, color, alpha, font, alignment, bold)
+  function service:draw_text(ass, x, y, value, size, color, alpha, font, alignment,
+      bold, ignore_controller_fade)
     ass:new_event(); ass:pos(x, y); ass:an(alignment or 5)
+    local rendered_alpha = ignore_controller_fade and (alpha or "00") or
+      self:fade_alpha(alpha)
     ass:append(string.format("{\\bord0\\shad0\\fs%d\\fn%s%s\\1c&H%s&\\1a&H%s&}",
       self:scale_font(size or 22), font or self.default_text_font,
       bold and "\\b1" or "", self:ass_color(color or "#FFFFFF"),
-      self:fade_alpha(alpha)))
+      rendered_alpha))
     ass:append(mp.command_native({"escape-ass", value or ""}))
   end
 
-  function service:draw_icon(ass, x, y, icon, color, size, alpha)
+  function service:draw_shadowed_text(ass, x, y, value, size, color, alpha, font, alignment)
+    ass:new_event(); ass:pos(x, y); ass:an(alignment or 5)
+    ass:append(string.format(
+      "{\\bord1.2\\3c&H000000&\\3a&H70&\\shad1.2\\4c&H000000&\\4a&H58&\\fs%d\\fn%s\\1c&H%s&\\1a&H%s&}",
+      self:scale_font(size or 22), font or self.default_text_font,
+      self:ass_color(color or "#FFFFFF"), self:fade_alpha(alpha)))
+    ass:append(mp.command_native({"escape-ass", value or ""}))
+  end
+
+  function service:draw_icon(ass, x, y, icon, color, size, alpha,
+      ignore_controller_fade)
     self:draw_text(ass, x, y, icon, size or self.icon_text_size, color, alpha,
-      "Material Symbols Rounded")
+      "Material Symbols Rounded", nil, nil, ignore_controller_fade)
   end
 
   return service

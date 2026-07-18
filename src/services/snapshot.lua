@@ -27,6 +27,35 @@ function snapshot.reader(deps)
       chapter_name = chapter.title
     end
 
+    local playlist_native = mp.get_property_native("playlist") or {}
+    local playlist_items = {}
+    for index, entry in ipairs(playlist_native) do
+      local title = entry.title
+      if type(title) ~= "string" or title:match("^%s*$") then
+        title = entry.filename or ("Item " .. tostring(index))
+        title = title:gsub("[?#].*$", ""):gsub("[/\\]+$", "")
+        title = title:match("([^/\\]+)$") or title
+      end
+      playlist_items[index] = {
+        title = title,
+        filename = entry.filename,
+        current = entry.current == true,
+        playing = entry.playing == true
+      }
+    end
+    local playlist_pos = mp.get_property_number("playlist-pos", -1) or -1
+    local loop_playlist = mp.get_property("loop-playlist", "no") or "no"
+    local loop_file = mp.get_property("loop-file", "no") or "no"
+    local function loop_enabled(value)
+      return value ~= "no" and value ~= "0"
+    end
+    local playlist_loop_mode = loop_enabled(loop_file) and "one" or
+      (loop_enabled(loop_playlist) and "all" or "off")
+    if not runtime.playlist.shuffle_initialized then
+      runtime.playlist.shuffled = mp.get_property_native("shuffle") == true
+      runtime.playlist.shuffle_initialized = true
+    end
+
     local video_id = mp.get_property_number("vid", 0) or 0
     local video_items = {}
     local image_items = {}
@@ -191,7 +220,14 @@ function snapshot.reader(deps)
       video_present = (mp.get_property_number("vid", 0) or 0) > 0,
       video_items = video_items,
       video_track_count = video_track_count,
-      video_params = mp.get_property_native("video-out-params") or {}
+      video_params = mp.get_property_native("video-out-params") or {},
+      playlist_items = playlist_items,
+      playlist_pos = playlist_pos,
+      playlist_count = #playlist_items,
+      playlist_looping = playlist_loop_mode == "all",
+      playlist_loop_mode = playlist_loop_mode,
+      playlist_shuffled = runtime.playlist.shuffled == true,
+      media_title = mp.get_property("media-title", "") or ""
     }
   end
 

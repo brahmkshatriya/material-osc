@@ -10,9 +10,18 @@ end
 
 function assets.initialize(args)
   local directory = script_directory(args.script_dir)
-  local font_dir = args.utils.join_path(directory, "fonts")
-  if not args.utils.file_info(font_dir) then
-    font_dir = args.utils.join_path(directory, "../fonts")
+  local candidates = {
+    args.utils.join_path(directory, "material-osc"),
+    args.utils.join_path(directory, "material-osc/fonts"),
+    args.utils.join_path(directory, "fonts"),
+    args.utils.join_path(directory, "../fonts")
+  }
+  local font_dir = candidates[1]
+  for _, candidate in ipairs(candidates) do
+    if args.utils.file_info(candidate) then
+      font_dir = candidate
+      break
+    end
   end
   args.msg.verbose("loading local OSD and subtitle font directory: " .. font_dir)
   mp.set_property("osd-fonts-dir", font_dir)

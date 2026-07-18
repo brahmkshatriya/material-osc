@@ -23,7 +23,8 @@ function controller.new(args)
     if opts.always_visible or opts.timeout <= 0 then return end
     runtime.timers.hide = mp.add_timeout(opts.timeout, function()
       self:update_mouse()
-      if runtime.chapter.open or runtime.settings.open or runtime.seek.dragging or
+      if runtime.playlist.open or runtime.chapter.open or runtime.settings.open or
+        runtime.seek.dragging or
         runtime.volume.dragging or
         (runtime.controller.bounds and args.mouse_in(runtime.controller.bounds)) or
         (runtime.volume.popup_bounds and args.mouse_in(runtime.volume.popup_bounds)) then
@@ -94,6 +95,9 @@ function controller.new(args)
       end
     end
     runtime.seek.dragging, runtime.chapter.dragging_scroll = false, false
+    runtime.playlist.drag_from, runtime.playlist.drag_to = nil, nil
+    runtime.playlist.drag_start_y = nil
+    runtime.playlist.dragging_scroll = false
     runtime.seek.position, runtime.seek.offset_x = nil, 0
     self:show()
   end
