@@ -8,7 +8,7 @@ selection, and convenient playback-speed controls—all without replacing mpv.
 
 ## Showcase
 
-[Watch the material-osc showcase (MP4)](assets/showcase.mp4)
+https://github.com/user-attachments/assets/65046da7-7d9e-4492-9e93-47650b8fc484
 
 ## Directory playlists
 
