@@ -51,7 +51,6 @@ function mpv_runtime.new(args)
     if state.pointer.click_timer then
       state.pointer.click_timer:kill(); state.pointer.click_timer = nil
     end
-    args.thumbnail:on_file_loaded()
     args.stream_quality:load()
     args.stream_quality:restore_subtitles()
     args.render()
@@ -133,7 +132,7 @@ function mpv_runtime.new(args)
       args.render()
     end)
     mp.register_event("shutdown", function()
-      self:dispose(); args.thumbnail:dispose()
+      self:dispose()
     end)
     mp.register_event("file-loaded", function() self:on_file_loaded() end)
 

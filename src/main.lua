@@ -2,11 +2,8 @@ local options = require "mp.options"
 local opts = {
   timeout = 2,
   always_visible = false,
-  thumbnails = true,
-  network_thumbnails = true,
-  thumbnail_mpv_path = "mpv",
   directory_playlist = true,
-  directory_playlist_sort = "newest",
+  directory_playlist_sort = "name",
   tooltip = true,
   dpi_scale = "auto",
   accent_color = "#00bbff",
@@ -153,7 +150,11 @@ end
 local dp = function(value) return ui_renderer:dp(value) end
 mp.set_property("geometry", "x66%")
 
-local text_metrics = text_metrics_module.new({dp = dp, default_size = 24})
+local text_metrics = text_metrics_module.new({
+  dp = dp,
+  scale_font = function(value) return ui_renderer:scale_font(value) end,
+  default_size = 24
+})
 local truncate_utf8 = text_metrics.truncate
 local text_intrinsic_width = text_metrics.width
 local truncate_utf8_to_width = text_metrics.truncate_to_width
@@ -235,13 +236,12 @@ local normal_text_size = ui_renderer.normal_text_size
 thumbnail_service, draw_thumbnail_preview = thumbnail_module.new({
   thumbnail_state = runtime.thumbnail, viewport = runtime.viewport,
   get_snapshot = function() return runtime.snapshot end,
-  opts = opts, utils = utils, msg = msg, dp = dp, clamp = clamp,
+  utils = utils, msg = msg, dp = dp, clamp = clamp,
   format_time = format_time, chapter_name_at = chapter_name_at,
   enqueue_effect = enqueue_effect,
   render = function(...) return render(...) end,
   draw_box = function(...) return draw_box(...) end,
   draw_text = function(...) return draw_text(...) end,
-  draw_loading_shape_morph = draw_loading_shape_morph,
   text_intrinsic_width = text_intrinsic_width,
   truncate_utf8_to_width = truncate_utf8_to_width
 })
@@ -291,7 +291,8 @@ local services = {
     draw_icon = draw_icon, draw_text = draw_text, draw_seekbar = draw_seekbar,
     draw_shadowed_text = draw_shadowed_text,
     draw_loading = draw_loading_shape_morph, mouse_in = mouse_in,
-    truncate_utf8 = truncate_utf8, format_time = format_time,
+    truncate_utf8 = truncate_utf8,
+    truncate_to_width = truncate_utf8_to_width, format_time = format_time,
     text_width = text_intrinsic_width,
     default_text_font = default_text_font, Modifier = Modifier, Rect = Rect,
     apply_modifier_size = apply_modifier_size, measure_node = measure_node,
@@ -341,7 +342,7 @@ local controller
 local runtime_host = mpv_runtime_module.new({
   state = runtime, mp = mp, navigation = navigation,
   playback_indicator = playback_indicator,
-  thumbnail = thumbnail_service, stream_quality = stream_quality,
+  stream_quality = stream_quality,
   directory_playlist = directory_playlist,
   controller = function() return controller end,
   render = function() render() end

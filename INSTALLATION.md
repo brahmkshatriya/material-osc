@@ -1,7 +1,9 @@
 # Installation
 
-1. Download the `material-osc.zip`
-2. Unzip it, and paste it into the scripts folder.
+1. Download `material-osc.zip` and
+   [`thumbfast.lua`](https://github.com/po5/thumbfast).
+2. Unzip material-osc into the scripts folder and place `thumbfast.lua` beside
+   `material-osc.lua`.
 
 The usual mpv configuration directories are:
 
@@ -15,6 +17,7 @@ mpv/
 ├── mpv.conf (optional)
 └── scripts/
     ├── material-osc.lua
+    ├── thumbfast.lua
     └── material-osc/
         ├── GoogleSansFlex.ttf
         └── MaterialSymbolsRoundedUnfilled.ttf

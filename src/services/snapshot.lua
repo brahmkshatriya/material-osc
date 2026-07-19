@@ -220,7 +220,6 @@ function snapshot.reader(deps)
       video_present = (mp.get_property_number("vid", 0) or 0) > 0,
       video_items = video_items,
       video_track_count = video_track_count,
-      video_params = mp.get_property_native("video-out-params") or {},
       playlist_items = playlist_items,
       playlist_pos = playlist_pos,
       playlist_count = #playlist_items,

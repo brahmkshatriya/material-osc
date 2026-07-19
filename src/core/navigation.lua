@@ -128,6 +128,7 @@ function navigation.new(args)
       mp.disable_key_bindings(self:binding(name))
     end
     runtime.chapter.dragging_scroll = false
+    runtime.chapter.fade:snap(0)
     runtime.playlist.drag_from, runtime.playlist.drag_to = nil, nil
     runtime.playlist.drag_start_y = nil
     runtime.playlist.dragging_scroll = false

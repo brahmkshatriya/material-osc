@@ -7,10 +7,25 @@ function playback_indicator.new(args)
   function service:show(icon, label, now, label_color)
     state.icon, state.label = icon, label
     state.label_color = label_color or "#FFFFFF"
+    state.pill_only = false
     state.opacity:snap(0); state.scale:snap(0.8)
     state.scale:set_target(1); state.opacity:set_target(1, now, 0.09)
     if state.hide_timer then state.hide_timer:kill() end
     state.hide_timer = mp.add_timeout(0.28, function()
+      state.hide_timer = nil
+      state.opacity:set_target(0, mp.get_time(), 0.20)
+      args.render()
+    end)
+  end
+
+  function service:show_pill(icon, label, now)
+    state.icon, state.label = icon, label
+    state.label_color = "#FFFFFF"
+    state.pill_only = true
+    state.opacity:snap(0); state.scale:snap(0.92)
+    state.scale:set_target(1); state.opacity:set_target(1, now, 0.09)
+    if state.hide_timer then state.hide_timer:kill() end
+    state.hide_timer = mp.add_timeout(1.4, function()
       state.hide_timer = nil
       state.opacity:set_target(0, mp.get_time(), 0.20)
       args.render()
@@ -38,12 +53,54 @@ function playback_indicator.new(args)
         muted and "Muted" or tostring(volume) .. "%", now,
         volume > 100 and "#FF9800" or "#FFFFFF")
     end
+
+    local subtitle_id = snapshot.subtitle_id or 0
+    local subtitle_visible = snapshot.sub_visibility ~= false
+    if state.last_subtitle_id == nil then
+      state.last_subtitle_id = subtitle_id
+      state.last_sub_visibility = subtitle_visible
+    elseif state.last_subtitle_id ~= subtitle_id or
+      state.last_sub_visibility ~= subtitle_visible then
+      state.last_subtitle_id = subtitle_id
+      state.last_sub_visibility = subtitle_visible
+      local label = "Subtitles off"
+      if subtitle_id ~= 0 and subtitle_visible then
+        for _, item in ipairs(snapshot.subtitle_items or {}) do
+          if item.id == subtitle_id then
+            label = item.label or ("Subtitle " .. tostring(subtitle_id))
+            break
+          end
+        end
+      end
+      self:show_pill("subtitles", label, now)
+    end
   end
 
   function service:draw(ass, bounds)
     local opacity = state.opacity.value
     if opacity <= 0.001 then return end
     local scale, dp = state.scale.value, ui.dp
+    if state.pill_only then
+      local icon_size = dp(26) * scale
+      local gap = dp(10) * scale
+      local horizontal_padding = dp(20) * scale
+      local pill_h = dp(54) * scale
+      local text_w = ui.text_width(state.label or "", 26) * scale
+      local pill_w = horizontal_padding * 2 + icon_size + gap + text_w
+      local cx = bounds.x + bounds.w / 2
+      local cy = bounds.y + bounds.h * 0.78
+      local x1, x2 = cx - pill_w / 2, cx + pill_w / 2
+      local y1, y2 = cy - pill_h / 2, cy + pill_h / 2
+      ui.draw_box(ass, x1, y1, x2, y2, pill_h / 2,
+        "#050708", ui.alpha(opacity * 0.84))
+      local icon_x = x1 + horizontal_padding + icon_size / 2
+      ui.draw_icon(ass, icon_x, cy, state.icon, "#FFFFFF", 26 * scale,
+        ui.alpha(opacity))
+      ui.draw_text(ass, icon_x + icon_size / 2 + gap, cy,
+        state.label, 26 * scale, state.label_color, ui.alpha(opacity),
+        ui.default_text_font, 4)
+      return
+    end
     local size = dp(160) * scale
     local cx, cy = bounds.x + bounds.w / 2, bounds.y + bounds.h / 2
     ui.draw_box(ass, cx - size / 2, cy - size / 2,
@@ -65,7 +122,9 @@ function playback_indicator.new(args)
   function service:reset()
     if state.hide_timer then state.hide_timer:kill(); state.hide_timer = nil end
     state.last_paused, state.last_volume, state.last_muted = nil, nil, nil
+    state.last_subtitle_id, state.last_sub_visibility = nil, nil
     state.label = nil
+    state.pill_only = false
     state.opacity:snap(0); state.scale:snap(1)
   end
 

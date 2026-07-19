@@ -4,7 +4,8 @@ local function new_chapter_popup(deps)
   local pointer, chapter_state = deps.pointer, deps.state
   local opts, dp, clamp = deps.opts, deps.dp, deps.clamp
   local ass_alpha_for_opacity = deps.ass_alpha_for_opacity
-  local truncate_utf8, format_time = deps.truncate_utf8, deps.format_time
+  local truncate_to_width, format_time = deps.truncate_to_width, deps.format_time
+  local text_width = deps.text_width
   local draw_box, draw_text = deps.draw_box, deps.draw_text
   local default_text_font, render = deps.default_text_font, deps.render
   local Modifier, Rect = deps.Modifier, deps.Rect
@@ -66,21 +67,21 @@ local function new_chapter_popup(deps)
              bounds.h / 2, "#FFFFFF", self.hover_alpha)
       end
       local seek_time = tonumber(self.chapter.time) or 0
+      local time_text = format_time(seek_time)
       local title_size = 24
-      local title_available_w = math.max(dp(72), bounds.w - dp(44) - dp(64))
-      local max_title_chars = math.max(6, math.floor(
-        title_available_w / math.max(1, dp(title_size * 0.35))))
+      local title_x = bounds.x + dp(self.selected and 28 or 16)
+      local time_right = bounds.x2 - dp(16)
+      local time_left = time_right - text_width(time_text, title_size)
+      local title_available_w = math.max(0, time_left - dp(16) - title_x)
       local title = self.chapter.title
       if type(title) ~= "string" or title:match("^%s*$") then
         title = "Chapter " .. tostring(self.chapter_index)
       end
-      title = truncate_utf8(title, max_title_chars)
-      draw_text(ass, bounds.x + dp(self.selected and 28 or 16),
-            bounds.y + bounds.h / 2,
+      title = truncate_to_width(title, title_available_w, title_size)
+      draw_text(ass, title_x, bounds.y + bounds.h / 2,
             title, title_size, "#FFFFFF", self.text_alpha,
             default_text_font, 4)
-      draw_text(ass, bounds.x2 - dp(16), bounds.y + bounds.h / 2,
-            format_time(seek_time), 24,
+      draw_text(ass, time_right, bounds.y + bounds.h / 2, time_text, 24,
             self.selected and opts.accent_color or "#CAC4D0",
             self.selected and self.text_alpha or self.secondary_alpha,
             default_text_font, 6)
@@ -134,7 +135,7 @@ local function new_chapter_popup(deps)
     local node = {
       item_count = 0, visible_count = 1, scroll_index = 0,
       dragging = false,
-      interactive = false, track_alpha = "00", thumb_alpha = "00",
+      interactive = false, opacity = 0,
       modifier = Modifier():fillMaxWidth():fillMaxHeight()
     }
     local function max_scroll() return math.max(0, node.item_count - node.visible_count) end
@@ -142,7 +143,7 @@ local function new_chapter_popup(deps)
       local maximum = max_scroll()
       local thumb_h, thumb_y = bounds.h, bounds.y
       if maximum > 0 then
-        thumb_h = math.max(dp(30), bounds.h * node.visible_count / node.item_count)
+        thumb_h = math.max(dp(32), bounds.h * node.visible_count / node.item_count)
         thumb_y = bounds.y + (bounds.h - thumb_h) * node.scroll_index / maximum
       end
       return thumb_h, thumb_y
@@ -178,13 +179,19 @@ local function new_chapter_popup(deps)
       return apply_modifier_size(self.modifier, {w = 0, h = 0}, parent)
     end
     function node:draw(ass, bounds)
+      if max_scroll() <= 0 then return end
+      local hovered = self.interactive and mouse_in(bounds)
       local track_w = dp(4)
-      local x1 = bounds.x + (bounds.w - track_w) / 2
+      local thumb_w = (hovered or self.dragging) and dp(7) or dp(6)
+      local center_x = bounds.x + bounds.w / 2
       local thumb_h, thumb_y = metrics(bounds)
-      draw_box(ass, x1, bounds.y, x1 + track_w, bounds.y2,
-           track_w / 2, "#FFFFFF", self.track_alpha)
-      draw_box(ass, x1, thumb_y, x1 + track_w, thumb_y + thumb_h,
-           track_w / 2, "#FFFFFF", self.thumb_alpha)
+      draw_box(ass, center_x - track_w / 2, bounds.y,
+        center_x + track_w / 2, bounds.y2, track_w / 2,
+        "#FFFFFF", ass_alpha_for_opacity(self.opacity * 0.14))
+      draw_box(ass, center_x - thumb_w / 2, thumb_y,
+        center_x + thumb_w / 2, thumb_y + thumb_h, thumb_w / 2,
+        "#FFFFFF", ass_alpha_for_opacity(
+          self.opacity * (hovered and 0.82 or 0.58)))
     end
     return node
   end
@@ -193,7 +200,6 @@ local function new_chapter_popup(deps)
     local node = {
       chapters = {}, interactive = false, text_alpha = "00",
       secondary_alpha = "00", hover_alpha = "00", selected_alpha = "00",
-      scrollbar_track_alpha = "00", scrollbar_thumb_alpha = "00",
       modifier = Modifier():fillMaxWidth():fillMaxHeight()
     }
     node.column = LazyChapterColumn(on_selected)
@@ -213,9 +219,11 @@ local function new_chapter_popup(deps)
       local max_scroll = math.max(0, #self.chapters - visible_count)
       chapter_state.scroll_index = clamp(chapter_state.scroll_index, 0, max_scroll)
       local horizontal_padding = dp(8)
-      local scrollbar_touch_w = dp(24)
+      local scrollbar_touch_w = dp(20)
+      local scrollbar_gutter = max_scroll > 0 and scrollbar_touch_w or 0
       local list_x = bounds.x + horizontal_padding
-      local list_w = math.max(dp(80), bounds.w - horizontal_padding * 2)
+      local list_w = math.max(dp(80), bounds.w - horizontal_padding * 2 -
+        scrollbar_gutter)
       self.column:update({
         items = self.chapters,
         first_visible_index = chapter_state.scroll_index,
@@ -234,14 +242,13 @@ local function new_chapter_popup(deps)
         visible_count = visible_count,
         scroll_index = chapter_state.scroll_index,
         interactive = self.interactive,
-        track_alpha = self.scrollbar_track_alpha,
-        thumb_alpha = self.scrollbar_thumb_alpha
+        opacity = self.opacity
       })
       draw_node(self.column, ass, Rect({x = list_x, y = bounds.y, w = list_w, h = bounds.h}))
       -- Draw the scrollbar after the rows so it stays above the right padding.
       if max_scroll > 0 then
         draw_node(self.scrollbar, ass, Rect({
-          x = bounds.x2 - scrollbar_touch_w,
+          x = bounds.x2 - horizontal_padding - scrollbar_touch_w,
           y = bounds.y, w = scrollbar_touch_w, h = bounds.h
         }))
       end
@@ -254,7 +261,6 @@ local function new_chapter_popup(deps)
       width = dp(320), height = dp(400), chapters = {}, interactive = false,
       panel_alpha = "00", text_alpha = "00", secondary_alpha = "00",
       hover_alpha = "00", selected_alpha = "00",
-      scrollbar_track_alpha = "00", scrollbar_thumb_alpha = "00",
       modifier = Modifier():clickable({
         name = "chapter-dialog-panel", enabled = false, on_click = function() end
       })
@@ -276,12 +282,11 @@ local function new_chapter_popup(deps)
       self.list:update({
         chapters = self.chapters,
         interactive = self.interactive,
+        opacity = self.opacity,
         text_alpha = self.text_alpha,
         secondary_alpha = self.secondary_alpha,
         hover_alpha = self.hover_alpha,
-        selected_alpha = self.selected_alpha,
-        scrollbar_track_alpha = self.scrollbar_track_alpha,
-        scrollbar_thumb_alpha = self.scrollbar_thumb_alpha
+        selected_alpha = self.selected_alpha
       })
     end
     function node:measure(parent)
@@ -307,7 +312,7 @@ end
 
 local function new_track_popup(deps)
   local opts, dp, clamp = deps.opts, deps.dp, deps.clamp
-  local truncate_utf8 = deps.truncate_utf8
+  local truncate_to_width, text_width = deps.truncate_to_width, deps.text_width
   local draw_box, draw_rect = deps.draw_box, deps.draw_rect
   local draw_icon = deps.draw_icon
   local draw_text = deps.draw_text
@@ -373,15 +378,22 @@ local function new_track_popup(deps)
       local text_x = bounds.x + dp(self.active and 28 or 16)
       local has_details = type(self.item.details) == "string" and
         self.item.details ~= ""
+      local text_right = bounds.x2 - dp(16)
+      if self.item.loading then
+        text_right = bounds.x2 - dp(40)
+      elseif self.item.language and not has_details then
+        text_right = text_right - text_width(self.item.language, 24) - dp(16)
+      end
+      local text_available_w = math.max(0, text_right - text_x)
       draw_text(ass, text_x,
         bounds.y + bounds.h / 2 - (has_details and dp(7) or 0),
-        truncate_utf8(self.item.label, math.max(8, math.floor(bounds.w / dp(9)))),
+        truncate_to_width(self.item.label, text_available_w,
+          has_details and 20 or 24),
         has_details and 20 or 24, "#FFFFFF", self.text_alpha,
         default_text_font, 4)
       if has_details then
         draw_text(ass, text_x, bounds.y + bounds.h / 2 + dp(9),
-          truncate_utf8(self.item.details,
-            math.max(12, math.floor(bounds.w / dp(7)))),
+          truncate_to_width(self.item.details, text_available_w, 17),
           17, "#CAC4D0", self.secondary_alpha, default_text_font, 4)
       end
       if self.item.loading then
@@ -489,8 +501,7 @@ local function new_track_popup(deps)
         visible_count = visible_count,
         scroll_index = config.state.scroll_index,
         interactive = self.interactive,
-        track_alpha = self.scrollbar_track_alpha,
-        thumb_alpha = self.scrollbar_thumb_alpha
+        opacity = self.scrollbar_opacity or self.opacity
       })
       if self.footer then
         self.footer:update({interactive = self.interactive,
@@ -513,7 +524,7 @@ local function new_track_popup(deps)
       local layout_height = self.layout_height or bounds.h
       local footer_height = self.footer and dp(48) or 0
       local list = Rect({x = bounds.x + dp(8), y = bounds.y + header_h + dp(8),
-        w = bounds.w - dp(16),
+        w = bounds.w - dp(16) - (self.max_scroll > 0 and dp(20) or 0),
         h = layout_height - header_h - dp(16) - footer_height})
       for slot, row in ipairs(self.rows) do
         if not row.item then break end
@@ -523,8 +534,7 @@ local function new_track_popup(deps)
       end
       if self.max_scroll > 0 then
         draw_node(self.scrollbar, ass, Rect({
-          x = bounds.x2 - dp(20), y = list.y,
-          w = dp(24), h = list.h
+          x = list.x2, y = list.y, w = dp(20), h = list.h
         }))
       end
       if self.footer then
@@ -582,7 +592,8 @@ function popups.new(services)
   local opts, msg, utils = services.config.opts, services.platform.msg, services.platform.utils
   local dp, clamp, smooth_step = ui.dp, ui.clamp, ui.smooth_step
   local ass_alpha_for_opacity = ui.alpha
-  local truncate_utf8, format_time = ui.truncate_utf8, ui.format_time
+  local format_time = ui.format_time
+  local truncate_to_width, text_width = ui.truncate_to_width, ui.text_width
   local draw_box, draw_rect, draw_icon = ui.draw_box, ui.draw_rect, ui.draw_icon
   local draw_text, draw_loading_shape_morph = ui.draw_text, ui.draw_loading
   local default_text_font, render = ui.default_text_font, services.effects.render
@@ -622,8 +633,13 @@ function popups.new(services)
       name = args.name .. "-backdrop", enabled = false, on_click = args.on_close
     })
     node.popup = args.popup
+    local function popup_opacity()
+      local source = args.opacity_animation or args.state.animation
+      local value = clamp(source.value, 0, 1)
+      return args.opacity_animation and value or smooth_step(value)
+    end
     function node:update(snapshot)
-      local opacity = smooth_step(clamp(args.state.animation.value, 0, 1))
+      local opacity = popup_opacity()
       local interactive = args.state.open
       self.backdrop:set_enabled(args.state.open or opacity > 0)
       args.update_popup(self.popup, snapshot, opacity, interactive)
@@ -632,15 +648,20 @@ function popups.new(services)
       return apply_modifier_size(self.modifier, {w = 0, h = 0}, parent)
     end
     function node:draw(ass, bounds)
-      local opacity = smooth_step(clamp(args.state.animation.value, 0, 1))
+      local opacity = popup_opacity()
       if opacity <= 0 and not args.state.open then return end
       draw_node(self.backdrop, ass, bounds)
       local anchor = input.hitboxes[args.anchor_name]
       local popup_size = measure_node(self.popup, bounds)
       local margin = dp(12)
-      local desired_x = anchor and
-        (anchor.x2 - popup_size.w + (args.anchor_offset_x or 0)) or
-        (bounds.x + (bounds.w - popup_size.w) / 2)
+      local desired_x = bounds.x + (bounds.w - popup_size.w) / 2
+      if anchor then
+        if args.anchor_start then
+          desired_x = anchor.x1 + (args.anchor_offset_x or 0)
+        else
+          desired_x = anchor.x2 - popup_size.w + (args.anchor_offset_x or 0)
+        end
+      end
       local desired_y = anchor and
         (anchor.y1 - popup_size.h - dp(8)) or
         (bounds.y + (bounds.h - popup_size.h) / 2)
@@ -649,7 +670,8 @@ function popups.new(services)
       local y = clamp(desired_y, bounds.y + margin,
         bounds.y2 - margin - popup_size.h)
       if args.slide_distance then
-        local slide_progress = clamp(args.state.animation.value, 0, 1.05)
+        local slide_animation = args.slide_animation or args.state.animation
+        local slide_progress = clamp(slide_animation.value, 0, 1.05)
         y = y + args.slide_distance * (1 - slide_progress)
       end
       local popup_bounds = Rect({x = x, y = y, w = popup_size.w, h = popup_size.h})
@@ -766,7 +788,8 @@ function popups.new(services)
   local chapter_widgets = new_chapter_popup({
     pointer = pointer, state = chapter_state, opts = opts, dp = dp, clamp = clamp,
     ass_alpha_for_opacity = ass_alpha_for_opacity,
-    truncate_utf8 = truncate_utf8, format_time = format_time,
+    truncate_to_width = truncate_to_width, text_width = text_width,
+    format_time = format_time,
     draw_box = draw_box, draw_text = draw_text, default_text_font = default_text_font,
     render = render, Modifier = Modifier, Rect = Rect,
     apply_modifier_size = apply_modifier_size, draw_node = draw_node,
@@ -777,7 +800,8 @@ function popups.new(services)
   local VerticalScrollbar = chapter_widgets.VerticalScrollbar
 
   local track_popups = new_track_popup({
-    opts = opts, dp = dp, clamp = clamp, truncate_utf8 = truncate_utf8,
+    opts = opts, dp = dp, clamp = clamp,
+    truncate_to_width = truncate_to_width, text_width = text_width,
     draw_box = draw_box, draw_rect = draw_rect, draw_icon = draw_icon,
     draw_text = draw_text,
     draw_loading_shape_morph = draw_loading_shape_morph,
@@ -813,14 +837,19 @@ function popups.new(services)
       end
       draw_icon(ass, bounds.x + dp(28), bounds.y + bounds.h / 2,
         self.icon, "#FFFFFF", 24, self.text_alpha)
-      draw_text(ass, bounds.x + dp(52), bounds.y + bounds.h / 2,
+      local label_x = bounds.x + dp(52)
+      draw_text(ass, label_x, bounds.y + bounds.h / 2,
         self.label, 22, "#FFFFFF", self.text_alpha, default_text_font, 4)
       if self.loading then
         draw_loading_shape_morph(ass, bounds.x2 - dp(24),
           bounds.y + bounds.h / 2, dp(22))
       else
-        draw_text(ass, bounds.x2 - dp(16), bounds.y + bounds.h / 2,
-          truncate_utf8(self.value, self.max_value_chars or 24),
+        local value_right = bounds.x2 - dp(16)
+        local value_left = label_x + text_width(self.label, 22) + dp(16)
+        local value = truncate_to_width(self.value,
+          math.max(0, value_right - value_left), 20)
+        draw_text(ass, value_right, bounds.y + bounds.h / 2,
+          value,
           20, "#CAC4D0", self.secondary_alpha, default_text_font, 6)
       end
     end
@@ -1280,17 +1309,14 @@ function popups.new(services)
       common.label, common.value = "Subtitles (" ..
         tostring(self.subtitle_track_count or math.max(0, #self.subtitle_items - 1)) .. ")",
         selected_track_label(self.subtitle_items, self.subtitle_id, "Off")
-      common.max_value_chars = 14
       self.subtitle_row:update(common)
-      common.max_value_chars = nil
       common.label, common.value = "Playback Speed", string.format("%gx", self.speed_value)
       self.speed_row:update(common)
       local page_props = {
         interactive = self.interactive, panel_alpha = self.panel_alpha,
         text_alpha = self.text_alpha, secondary_alpha = self.secondary_alpha,
         hover_alpha = self.hover_alpha, selected_alpha = self.selected_alpha,
-        scrollbar_track_alpha = self.scrollbar_track_alpha,
-        scrollbar_thumb_alpha = self.scrollbar_thumb_alpha
+        scrollbar_opacity = self.scrollbar_opacity
       }
       page_props.width, page_props.height = self.width, self.height
       page_props.layout_height = self.layout_height
@@ -1360,15 +1386,20 @@ function popups.new(services)
     local close = function() set_chapter_dialog_open(false) end
     return PopupHost({
       name = "chapter-dialog", state = chapter_state,
-      anchor_name = "chapter-display", anchor_offset_x = -dp(8), on_close = close,
+      anchor_name = "chapter-display", anchor_start = true, on_close = close,
+      opacity_animation = chapter_state.fade,
+      slide_animation = chapter_state.animation, slide_distance = dp(18),
       popup = ChapterPopup(close),
       update_popup = function(popup, snapshot, opacity, interactive)
         local props = popup_visual_props(opacity, interactive)
         props.width = math.max(dp(160), math.min(dp(320), viewport.w - dp(24)))
         local content_h = dp(72) + #snapshot.chapters * dp(48)
         if #snapshot.chapters > 0 then content_h = content_h - dp(4) end
-        props.height = clamp(content_h, dp(116),
-          math.max(dp(116), math.min(dp(480), viewport.h - dp(24))))
+        local max_h = math.max(dp(116), math.min(dp(480), viewport.h - dp(24)))
+        local whole_rows = math.max(1,
+          math.floor((max_h - dp(68)) / dp(48)))
+        max_h = dp(68) + whole_rows * dp(48)
+        props.height = clamp(content_h, dp(116), max_h)
         props.chapters = snapshot.chapters
         props.selected_index = snapshot.chapter_index or -1
         popup:update(props)
@@ -1440,8 +1471,7 @@ function popups.new(services)
         local props = popup_visual_props(content_opacity, interactive)
         props.opacity = opacity
         props.panel_alpha = ass_alpha_for_opacity(opacity * 0.96)
-        props.scrollbar_track_alpha = ass_alpha_for_opacity(content_opacity * 0.16)
-        props.scrollbar_thumb_alpha = ass_alpha_for_opacity(content_opacity * 0.52)
+        props.scrollbar_opacity = content_opacity
         props.width = settings_state.width_animation.value
         props.height = settings_state.height_animation.value
         props.layout_height = target_h

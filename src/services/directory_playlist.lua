@@ -72,13 +72,21 @@ function directory_playlist.new(args)
     end
 
     if #items < 2 then return end
-    local oldest_first = tostring(opts.directory_playlist_sort):lower() == "oldest"
+    local sort_mode = tostring(opts.directory_playlist_sort):lower()
+    local function name_before(left, right)
+      local left_name, right_name = left.name:lower(), right.name:lower()
+      if left_name ~= right_name then return left_name < right_name end
+      return left.name < right.name
+    end
+
     table.sort(items, function(left, right)
-      if left.mtime ~= right.mtime then
-        if oldest_first then return left.mtime < right.mtime end
+      if sort_mode == "oldest" and left.mtime ~= right.mtime then
+        return left.mtime < right.mtime
+      end
+      if sort_mode == "newest" and left.mtime ~= right.mtime then
         return left.mtime > right.mtime
       end
-      return left.name:lower() < right.name:lower()
+      return name_before(left, right)
     end)
 
     local current_position

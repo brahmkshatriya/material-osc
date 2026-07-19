@@ -20,6 +20,8 @@ function animation_coordinator.new(args)
       state.animation:set_target(state.open and 1 or 0)
       state.animation:update(now)
     end
+    runtime.chapter.fade:set_target(runtime.chapter.open and 1 or 0)
+    runtime.chapter.fade:update(now)
     runtime.playlist.width_animation:update(now)
     runtime.playlist.height_animation:update(now)
     runtime.settings.content_animation:update(now)

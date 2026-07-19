@@ -12,6 +12,7 @@ function controls.new(services)
   local ass_alpha_for_opacity = ui.alpha
   local draw_rect, draw_box, draw_text = ui.draw_rect, ui.draw_box, ui.draw_text
   local draw_seekbar, mouse_in = ui.draw_seekbar, ui.mouse_in
+  local text_width, format_time = ui.text_width, ui.format_time
   local render = services.effects.render
   local preview_seek_to_mouse = player.preview_seek_to_mouse
   local seek_pos_from_mouse, seek_to_pos = player.seek_pos_from_mouse, player.seek_to_pos
@@ -255,27 +256,49 @@ function controls.new(services)
         end
       })
     })
-    node.chapter_text = TextItem({
-      text = "",
+    node.chapter_text = TextItem({text = ""})
+    node.chapter = Visibility({
+      visible = false,
       modifier = Modifier():clickable({
         name = "chapter-display",
         on_click = function()
-          chapter_state.scroll_index = math.max(0, (get_snapshot().chapter_index or 0) - 2)
+          chapter_state.scroll_index = math.max(0,
+            (get_snapshot().chapter_index or 0) - 2)
           set_chapter_dialog_open(true)
         end
+      }),
+      child = Pill({
+        horizontal_padding = 8,
+        children = {node.chapter_text}
       })
     })
-    node.chapter = Visibility({
-      visible = false,
-      child = Pill({horizontal_padding = 8, children = {node.chapter_text}})
-    })
+
+    local widest_digit = "0"
+    local widest_digit_width = text_width(widest_digit, node.time.size)
+    for digit = 1, 9 do
+      local candidate = tostring(digit)
+      local candidate_width = text_width(candidate, node.time.size)
+      if candidate_width > widest_digit_width then
+        widest_digit = candidate
+        widest_digit_width = candidate_width
+      end
+    end
+
+    local function stable_time_width(snapshot)
+      local duration_text = format_time(snapshot.duration or 0)
+      local widest_time = duration_text:gsub("%d", widest_digit)
+      local reference = "-" .. widest_time .. " / " .. widest_time
+      return math.max(text_width(reference, node.time.size),
+              text_width(snapshot.time_text, node.time.size))
+    end
+
     node.starting = Row({
       gap = dp(8),
       modifier = Modifier():align({horizontal = "starting", vertical = "center"}),
       children = {
         Pill({children = {node.play}}),
         Pill({no_background = true, children = {node.volume}}),
-        Pill({horizontal_padding = 0, children = {node.time}}),
+        Pill({children = {node.time}}),
         node.chapter
       }
     })
@@ -305,6 +328,7 @@ function controls.new(services)
         tooltip = snapshot.paused and "Play" or "Pause"
       })
       self.volume:update(snapshot)
+      self.time.modifier.fixed_width = stable_time_width(snapshot)
       self.time:update({text = snapshot.time_text})
       self.chapter_text:update({text = snapshot.chapter_name or ""})
       self.chapter:set_visible(snapshot.chapter_name ~= nil)

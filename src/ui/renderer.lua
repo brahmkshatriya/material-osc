@@ -101,12 +101,17 @@ function renderer.new(args)
   end
 
   function service:draw_shadowed_text(ass, x, y, value, size, color, alpha, font, alignment)
-    ass:new_event(); ass:pos(x, y); ass:an(alignment or 5)
+    local text_size = self:scale_font(size or 22)
+    local text_font = font or self.default_text_font
+    local escaped_value = mp.command_native({"escape-ass", value or ""})
+    ass:new_event()
+    ass:pos(x + self:dp(1.2), y + self:dp(1.5))
+    ass:an(alignment or 5)
     ass:append(string.format(
-      "{\\bord1.2\\3c&H000000&\\3a&H70&\\shad1.2\\4c&H000000&\\4a&H58&\\fs%d\\fn%s\\1c&H%s&\\1a&H%s&}",
-      self:scale_font(size or 22), font or self.default_text_font,
-      self:ass_color(color or "#FFFFFF"), self:fade_alpha(alpha)))
-    ass:append(mp.command_native({"escape-ass", value or ""}))
+      "{\\bord1.4\\blur4\\shad0\\fs%d\\fn%s\\1c&H000000&\\3c&H000000&\\1a&H%s&\\3a&H%s&}",
+      text_size, text_font, self:fade_alpha("58"), self:fade_alpha("58")))
+    ass:append(escaped_value)
+    self:draw_text(ass, x, y, value, size, color, alpha, font, alignment)
   end
 
   function service:draw_icon(ass, x, y, icon, color, size, alpha,

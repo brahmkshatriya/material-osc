@@ -42,8 +42,9 @@ function application_state.new(args)
     },
     playback_indicator = {
       last_paused = nil, last_volume = nil, last_muted = nil,
+      last_subtitle_id = nil, last_sub_visibility = nil,
       icon = "play_arrow", label = nil, label_color = "#FFFFFF",
-      hide_timer = nil
+      hide_timer = nil, pill_only = false
     },
     ytdl = {
       active = false, source = nil, url = nil, items = {}, caption_items = {},
@@ -54,17 +55,8 @@ function application_state.new(args)
     },
     tooltip = {hover_key = nil, hover_start = 0, requested = false, visual = nil},
     thumbnail = {
-      preview = {width = 240, height = 135, disabled = false, available = true},
-      visible = false, request_pos = nil, loading = false, request_id = 0,
-      request_timer = nil, exact_timer = nil, prewarm_timer = nil,
-      overlay_id = 43, file = nil, file_width = 0, file_height = 0,
-      target_x = nil, target_y = nil, display_x = nil, display_y = nil,
-      pending_pos = nil, last_seek_at = -math.huge, worker_id = nil,
-      worker_socket = nil, worker_command_file = nil,
-      worker_command_handle = nil, worker_client_script = nil,
-      worker_output = nil, worker_candidate = nil, worker_display = nil,
-      worker_width = 0, worker_height = 0, worker_source = nil,
-      poll_timer = nil
+      width = 0, height = 0, disabled = true, available = false,
+      visible = false
     },
     timers = {hide = nil, frame = nil, frame_interval = 1 / 60},
     loading = {started_ms = args.now_ms(), quality_switching = false},
@@ -79,6 +71,7 @@ function application_state.new(args)
   })
   runtime.volume.animation = animation.spring({initial = 0, stiffness = 360, damping = 24})
   runtime.chapter.animation = animation.spring({initial = 0, stiffness = 380, damping = 26})
+  runtime.chapter.fade = animation.tween({initial = 0, duration = 0.18})
   runtime.playlist.animation = animation.spring({initial = 0, stiffness = 380, damping = 26})
   runtime.playlist.width_animation = animation.spring({
     initial = 118, stiffness = 560, damping = 38

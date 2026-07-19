@@ -160,10 +160,6 @@ def main() -> None:
     icon_count, source_font_size, subset_font_size = build_fonts(
         source_dir, destination / "material-osc"
     )
-    packaged_thumbnails = destination / "material-osc" / "thumbnails"
-    if packaged_thumbnails.exists():
-        shutil.rmtree(packaged_thumbnails)
-
     print(
         f"Built material-osc {args.version} with {module_count} modules and "
         f"{icon_count} icons in {destination}"

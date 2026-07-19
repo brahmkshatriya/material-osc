@@ -13,7 +13,7 @@ function playlist.new(services)
   local draw_node = ui.draw_node
   local mouse_in, render = ui.mouse_in, services.effects.render
   local default_text_font = ui.default_text_font
-  local truncate_utf8 = ui.truncate_utf8
+  local truncate_to_width = ui.truncate_to_width
   local set_open = services.navigation.set_playlist_open
 
   local function move_target_from_pointer()
@@ -96,9 +96,10 @@ function playlist.new(services)
           default_text_font)
       end
       local title = self.item.title or ("Item " .. tostring(self.index))
-      local max_chars = math.max(8, math.floor((bounds.w - dp(92)) / math.max(1, dp(9))))
-      title = truncate_utf8(title, max_chars)
-      draw_text(ass, bounds.x + dp(68), bounds.y + bounds.h / 2,
+      local title_x = bounds.x + dp(68)
+      title = truncate_to_width(title,
+        math.max(0, bounds.x2 - dp(16) - title_x), 22)
+      draw_text(ass, title_x, bounds.y + bounds.h / 2,
         title, 22, "#FFFFFF", self.text_alpha, default_text_font, 4)
     end
     return node
@@ -239,9 +240,10 @@ function playlist.new(services)
       local hover_alpha = alpha(self.opacity * 0.16)
       local selected_alpha = alpha(self.opacity * 0.30)
 
-      local footer_h, padding = dp(42), dp(8)
+      local footer_h, padding, footer_gap = dp(42), dp(8), dp(8)
       local list_area = Rect({x = bounds.x + padding, y = bounds.y + padding,
-        w = bounds.w - padding * 2, h = math.max(0, bounds.h - footer_h - padding)})
+        w = bounds.w - padding * 2,
+        h = math.max(0, bounds.h - footer_h - padding - footer_gap)})
       local row_h = dp(52)
       -- Row capacity belongs to the fully expanded panel. Deriving it from
       -- the animated height makes a settling spring briefly add a scrollbar.
@@ -355,7 +357,7 @@ function playlist.new(services)
       self.backdrop.modifier.pointer_enabled = morphing
       self.content.modifier.pointer_enabled = morphing
       self.panel_width = math.max(dp(260), math.min(dp(380), state.viewport.w - dp(24)))
-      local row_h, panel_chrome = dp(52), dp(50)
+      local row_h, panel_chrome = dp(52), dp(58)
       local maximum_h = math.max(panel_chrome + row_h,
         math.min(dp(520), state.viewport.h - dp(24)))
       local maximum_rows = math.max(1, math.floor((maximum_h - panel_chrome) / row_h))
@@ -427,8 +429,7 @@ function playlist.new(services)
       local title = self.snapshot.media_title or ""
       local title_x = bounds.x + source.w + dp(12)
       local available = math.max(0, bounds.x2 - title_x - dp(8))
-      local max_chars = math.max(1, math.floor(available / math.max(1, dp(11))))
-      title = truncate_utf8(title, max_chars)
+      title = truncate_to_width(title, available, 24)
       ui.draw_shadowed_text(ass, title_x, bounds.y + bounds.h / 2,
         title, 24, "#FFFFFF", nil, default_text_font, 4)
     end
