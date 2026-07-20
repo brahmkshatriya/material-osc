@@ -6,7 +6,14 @@ function animation_coordinator.new(args)
 
   function service:update(now)
     runtime.controller.opacity:update(now)
-    local modal = runtime.playlist.open or runtime.playlist.animation:is_running() or
+    local context_visible = runtime.context_menu.open or
+      runtime.context_menu.pending_x ~= nil or
+      runtime.context_menu.animation:is_running() or
+      runtime.context_menu.animation.value > 0.001 or
+      runtime.context_menu.width_animation:is_running() or
+      runtime.context_menu.height_animation:is_running()
+    local modal = runtime.update.open or context_visible or runtime.playlist.open or
+      runtime.playlist.animation:is_running() or
       runtime.chapter.open or runtime.chapter.animation.value > 0.001 or
       runtime.settings.open or runtime.settings.animation.value > 0.001
     local wants_volume = not modal and (runtime.volume.dragging or
@@ -14,6 +21,11 @@ function animation_coordinator.new(args)
       (runtime.volume.popup_bounds and args.mouse_in(runtime.volume.popup_bounds)))
     runtime.volume.animation:set_target(wants_volume and 1 or 0)
     runtime.volume.animation:update(now)
+
+    runtime.context_menu.animation:set_target(runtime.context_menu.open and 1 or 0)
+    runtime.context_menu.animation:update(now)
+    runtime.context_menu.width_animation:update(now)
+    runtime.context_menu.height_animation:update(now)
 
     for _, name in ipairs({"playlist", "chapter", "subtitle", "audio", "settings"}) do
       local state = runtime[name]
@@ -29,6 +41,27 @@ function animation_coordinator.new(args)
     runtime.settings.height_animation:update(now)
     runtime.playback_indicator.opacity:update(now)
     runtime.playback_indicator.scale:update(now)
+
+    local pointer = runtime.pointer
+    local controller_bounds = runtime.controller.bounds
+    local over_controller = controller_bounds and args.mouse_in(controller_bounds)
+    local edge_modal = modal or runtime.subtitle.open or runtime.audio.open or
+      runtime.subtitle.animation:is_running() or runtime.audio.animation:is_running()
+    local edge_allowed = not edge_modal and not over_controller and
+      pointer.x >= 0 and pointer.y >= 0
+    local edge_width = runtime.viewport.w * 0.25
+    local wants_left = edge_allowed and pointer.x <= edge_width
+    local wants_right = edge_allowed and pointer.x >= runtime.viewport.w - edge_width
+    for _, item in ipairs({
+      {state = runtime.edge_seek.left, visible = wants_left},
+      {state = runtime.edge_seek.right, visible = wants_right}
+    }) do
+      item.state.opacity:set_target(item.visible and 1 or 0, now, 0.15)
+      item.state.slide:set_target(item.visible and 1 or 0)
+      item.state.opacity:update(now)
+      item.state.slide:update(now)
+      item.state.feedback:update(now)
+    end
 
     local settings = runtime.settings
     if settings.transition_phase == "fade_out" and

@@ -10,7 +10,9 @@ function controller.new(args)
   end
 
   function service:animate_visibility(visible)
-    if opts.always_visible then visible = true end
+    if runtime.controller.input_suppressed then
+      visible = false
+    end
     runtime.controller.visible = visible
     runtime.controller.opacity:set_target(visible and 1 or 0, mp.get_time(), 0.18)
     if not visible then args.thumbnail:clear() end
@@ -18,16 +20,16 @@ function controller.new(args)
   end
 
   function service:show()
+    if runtime.controller.input_suppressed then
+      self:animate_visibility(false)
+      return
+    end
     self:animate_visibility(true)
     if runtime.timers.hide then runtime.timers.hide:kill(); runtime.timers.hide = nil end
-    if opts.always_visible or opts.timeout <= 0 then return end
-    runtime.timers.hide = mp.add_timeout(opts.timeout, function()
+    if opts.mouse_timeout <= 0 then return end
+    runtime.timers.hide = mp.add_timeout(opts.mouse_timeout, function()
       self:update_mouse()
-      if runtime.playlist.open or runtime.chapter.open or runtime.settings.open or
-        runtime.seek.dragging or
-        runtime.volume.dragging or
-        (runtime.controller.bounds and args.mouse_in(runtime.controller.bounds)) or
-        (runtime.volume.popup_bounds and args.mouse_in(runtime.volume.popup_bounds)) then
+      if self:should_show_at_pointer() then
         self:show()
       else
         self:animate_visibility(false)
@@ -35,17 +37,42 @@ function controller.new(args)
     end)
   end
 
+  function service:should_show_at_pointer()
+    if runtime.update.open then return true end
+    if runtime.seek.dragging or runtime.volume.dragging then
+      return true
+    end
+    for _, name in ipairs(args.navigation.dialogs) do
+      if runtime[name].open then return true end
+    end
+    return (runtime.controller.bounds and args.mouse_in(runtime.controller.bounds)) or
+      (runtime.volume.popup_bounds and args.mouse_in(runtime.volume.popup_bounds)) or false
+  end
+
+  function service:sync_visibility_with_pointer()
+    local pointer_active = runtime.pointer.x >= 0 and runtime.pointer.y >= 0
+    if (opts.always_visible and pointer_active) or self:should_show_at_pointer() then
+      self:show()
+    else
+      if runtime.timers.hide then
+        runtime.timers.hide:kill()
+        runtime.timers.hide = nil
+      end
+      self:animate_visibility(false)
+    end
+  end
+
   function service:on_mouse_move()
     self:update_mouse()
     local active = runtime.pointer.active
     if active and active.on_move then active.on_move(active) end
-    self:show()
+    self:sync_visibility_with_pointer()
   end
 
   function service:on_mouse_leave()
     runtime.pointer.x, runtime.pointer.y = -1, -1
     args.thumbnail:clear()
-    args.render()
+    self:sync_visibility_with_pointer()
   end
 
   function service:on_primary_down()
@@ -58,7 +85,7 @@ function controller.new(args)
       if box.name == "video-surface" then runtime.pointer.pending_click = box
       else box.on_click() end
     end
-    self:show()
+    self:sync_visibility_with_pointer()
   end
 
   function service:on_primary_double()
@@ -71,7 +98,7 @@ function controller.new(args)
       end
       box.on_double(box)
     end
-    self:show()
+    self:sync_visibility_with_pointer()
   end
 
   function service:on_primary_up()
@@ -99,7 +126,7 @@ function controller.new(args)
     runtime.playlist.drag_start_y = nil
     runtime.playlist.dragging_scroll = false
     runtime.seek.position, runtime.seek.offset_x = nil, 0
-    self:show()
+    self:sync_visibility_with_pointer()
   end
 
   function service:on_primary_button(event)
@@ -108,6 +135,12 @@ function controller.new(args)
     elseif event.event == "up" then
       self:on_primary_up()
     end
+  end
+
+  function service:on_secondary_down()
+    self:update_mouse()
+    if runtime.update.open then return end
+    args.open_context_menu(runtime.pointer.x, runtime.pointer.y)
   end
 
   function service:scroll_open_dialog(direction)
@@ -124,13 +157,60 @@ function controller.new(args)
     return false
   end
 
+  function service:flush_wheel()
+    local wheel = runtime.wheel
+    local kind, amount = wheel.kind, wheel.amount
+    if wheel.timer then wheel.timer:kill() end
+    wheel.kind, wheel.amount, wheel.timer = nil, 0, nil
+    if not kind or amount == 0 then return end
+    if kind == "seek" then
+      mp.command(string.format("osd-auto seek %g relative", amount))
+    else
+      mp.commandv("add", "volume", tostring(amount))
+    end
+  end
+
+  function service:queue_wheel(kind, amount)
+    local wheel = runtime.wheel
+    if wheel.kind and wheel.kind ~= kind then self:flush_wheel() end
+    wheel.kind = kind
+    wheel.amount = wheel.amount + amount
+    if wheel.timer then return end
+    wheel.timer = mp.add_timeout(0.05, function()
+      wheel.timer = nil
+      self:flush_wheel()
+    end)
+  end
+
   function service:on_wheel(direction)
     self:update_mouse()
     if self:scroll_open_dialog(direction) then return end
     local _, box = args.hitbox_at_cursor()
     local action = direction < 0 and box and box.on_scroll_up or box and box.on_scroll_down
-    if action then action(box) end
-    self:show()
+    if action then
+      action(box)
+      self:sync_visibility_with_pointer()
+      return
+    end
+
+    local context = runtime.context_menu
+    local modal = runtime.update.open or context.open or
+      context.pending_x ~= nil or context.animation:is_running()
+    for _, name in ipairs(args.navigation.dialogs) do
+      local state = runtime[name]
+      modal = modal or state.open or state.animation:is_running()
+    end
+    if modal then return end
+
+    local width = math.max(1, runtime.viewport.w)
+    local horizontal_position = runtime.pointer.x / width
+    if horizontal_position < 0.25 or horizontal_position > 0.75 then
+      local step = math.max(1, tonumber(opts.seek_step_seconds) or 5)
+      local amount = direction < 0 and step or -step
+      self:queue_wheel("seek", amount)
+    else
+      self:queue_wheel("volume", direction < 0 and 5 or -5)
+    end
   end
 
   function service:on_dimensions(_, value)

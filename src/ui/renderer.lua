@@ -44,11 +44,22 @@ function renderer.new(args)
       math.floor(255 - 255 * self:clamp(opacity, 0, 1) + 0.5))
   end
 
-  function service:draw_box(ass, x1, y1, x2, y2, radius, color, alpha)
+  local function append_clip(ass, bounds)
+    if not bounds then return end
+    ass:append(string.format("{\\clip(%d,%d,%d,%d)}",
+      math.floor(bounds.x1), math.floor(bounds.y1),
+      math.ceil(bounds.x2), math.ceil(bounds.y2)))
+  end
+
+  function service:draw_box(ass, x1, y1, x2, y2, radius, color, alpha,
+      ignore_controller_fade, clip_bounds)
     if x2 <= x1 or y2 <= y1 then return end
     ass:new_event(); ass:pos(x1, y1); ass:an(7)
+    local rendered_alpha = ignore_controller_fade and (alpha or "00") or
+      self:fade_alpha(alpha)
     ass:append(string.format("{\\1c&H%s&\\1a&H%s&\\bord0\\shad0}",
-      self:ass_color(color), self:fade_alpha(alpha)))
+      self:ass_color(color), rendered_alpha))
+    append_clip(ass, clip_bounds)
     ass:draw_start()
     ass:round_rect_cw(0, 0, x2 - x1, y2 - y1, radius or 0)
     ass:draw_stop()
@@ -89,7 +100,7 @@ function renderer.new(args)
   end
 
   function service:draw_text(ass, x, y, value, size, color, alpha, font, alignment,
-      bold, ignore_controller_fade)
+      bold, ignore_controller_fade, clip_bounds)
     ass:new_event(); ass:pos(x, y); ass:an(alignment or 5)
     local rendered_alpha = ignore_controller_fade and (alpha or "00") or
       self:fade_alpha(alpha)
@@ -97,6 +108,7 @@ function renderer.new(args)
       self:scale_font(size or 22), font or self.default_text_font,
       bold and "\\b1" or "", self:ass_color(color or "#FFFFFF"),
       rendered_alpha))
+    append_clip(ass, clip_bounds)
     ass:append(mp.command_native({"escape-ass", value or ""}))
   end
 
@@ -115,9 +127,9 @@ function renderer.new(args)
   end
 
   function service:draw_icon(ass, x, y, icon, color, size, alpha,
-      ignore_controller_fade)
+      ignore_controller_fade, clip_bounds)
     self:draw_text(ass, x, y, icon, size or self.icon_text_size, color, alpha,
-      "Material Symbols Rounded", nil, nil, ignore_controller_fade)
+      "Material Symbols Rounded", nil, nil, ignore_controller_fade, clip_bounds)
   end
 
   return service

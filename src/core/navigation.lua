@@ -84,6 +84,9 @@ function navigation.new(args)
       items, active_id = runtime.snapshot.audio_items, runtime.snapshot.audio_id
     elseif page == "subtitles" then
       items, active_id = runtime.snapshot.subtitle_items, runtime.snapshot.subtitle_id
+    elseif page == "secondary_subtitles" then
+      items = runtime.snapshot.subtitle_items
+      active_id = runtime.snapshot.secondary_subtitle_id
     elseif page == "auto_captions" then
       items = runtime.ytdl.caption_items
     end

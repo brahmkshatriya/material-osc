@@ -10,6 +10,37 @@ selection, and convenient playback-speed controls—all without replacing mpv.
 
 https://github.com/user-attachments/assets/65046da7-7d9e-4492-9e93-47650b8fc484
 
+## Configuration
+
+material-osc can be customized with a `material-osc.conf` file in mpv's
+`script-opts` directory. On Linux, create it with:
+
+```bash
+mkdir -p ~/.config/mpv/script-opts
+$EDITOR ~/.config/mpv/script-opts/material-osc.conf
+```
+
+For example, the following configuration uses a fixed 1x UI scale and a
+pastel-red accent color:
+
+```conf
+dpi_scale=1
+accent_color=#FF6961
+```
+
+`dpi_scale` controls the size of the interface. Its default value, `auto`, uses
+the display's reported scale; a number from `0.5` to `4` sets it explicitly.
+`accent_color` controls highlighted UI elements and accepts a six-digit RGB hex
+color. Set `context_menu=no` to disable the right-click context menu. Restart
+mpv after changing the file. `mouse_timeout` controls how many seconds the
+controls remain visible after pointer activity. `seek_step_seconds` controls
+how many seconds the left and right edge actions seek backward or forward.
+With `always_visible=yes`, pointer activity anywhere reveals the controls; they
+still hide after `mouse_timeout` when the pointer is outside the controller.
+
+On other platforms, place the same file at
+`<mpv config directory>/script-opts/material-osc.conf`.
+
 ## Directory playlists
 
 Opening a local media file automatically adds the other video and audio files

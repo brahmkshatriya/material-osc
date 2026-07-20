@@ -46,6 +46,8 @@ function snapshot.reader(deps)
     local playlist_pos = mp.get_property_number("playlist-pos", -1) or -1
     local loop_playlist = mp.get_property("loop-playlist", "no") or "no"
     local loop_file = mp.get_property("loop-file", "no") or "no"
+    local ab_loop_a = mp.get_property_number("ab-loop-a")
+    local ab_loop_b = mp.get_property_number("ab-loop-b")
     local function loop_enabled(value)
       return value ~= "no" and value ~= "0"
     end
@@ -61,6 +63,7 @@ function snapshot.reader(deps)
     local image_items = {}
     local video_stream_index = 0
     local subtitle_id = mp.get_property_number("sid", 0) or 0
+    local secondary_subtitle_id = mp.get_property_number("secondary-sid", 0) or 0
     local subtitle_items = {{id = 0, label = "Off", language = nil}}
     local audio_id = mp.get_property_number("aid", 0) or 0
     local audio_items = {{id = 0, label = "Off", language = nil}}
@@ -199,6 +202,9 @@ function snapshot.reader(deps)
       volume = mp.get_property_number("volume", 0) or 0,
       speed = mp.get_property_number("speed", 1) or 1,
       sub_visibility = mp.get_property_native("sub-visibility") ~= false,
+      subtitle_text = mp.get_property("sub-text", "") or "",
+      secondary_sub_visibility =
+        mp.get_property_native("secondary-sub-visibility") ~= false,
       subtitle_delay = mp.get_property_number("sub-delay", 0) or 0,
       subtitle_font_size = mp.get_property_number("sub-font-size", 38) or 38,
       subtitle_border_size = mp.get_property_number("sub-border-size", 1.65) or 1.65,
@@ -209,6 +215,7 @@ function snapshot.reader(deps)
       chapters = chapters,
       subtitle_items = subtitle_items,
       subtitle_id = subtitle_id,
+      secondary_subtitle_id = secondary_subtitle_id,
       audio_items = audio_items,
       audio_id = audio_id,
       chapter_name = chapter_name,
@@ -225,6 +232,8 @@ function snapshot.reader(deps)
       playlist_count = #playlist_items,
       playlist_looping = playlist_loop_mode == "all",
       playlist_loop_mode = playlist_loop_mode,
+      ab_loop_a = ab_loop_a,
+      ab_loop_b = ab_loop_b,
       playlist_shuffled = runtime.playlist.shuffled == true,
       media_title = mp.get_property("media-title", "") or ""
     }

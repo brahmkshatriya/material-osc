@@ -8,19 +8,22 @@
 The usual mpv configuration directories are:
 
 - Linux and macOS: `~/.config/mpv/`
-- Windows: `%APPDATA%\\mpv\\`
+- Windows: `%APPDATA%\mpv\`
 
 The resulting layout should look like this:
 
 ```text
-mpv/
+📁 mpv
 ├── mpv.conf (optional)
-└── scripts/
-    ├── material-osc.lua
-    ├── thumbfast.lua
-    └── material-osc/
-        ├── GoogleSansFlex.ttf
-        └── MaterialSymbolsRoundedUnfilled.ttf
+├── 📁 scripts
+│   ├── material-osc.lua
+│   ├── thumbfast.lua
+│   └── 📁 material-osc
+│       ├── GoogleSansFlex.ttf
+│       └── MaterialSymbolsRoundedUnfilled.ttf
+└── 📁 script-opts (optional)
+    ├── material-osc.conf
+    └── thumbfast.conf
 ```
 
 For smoother rendering, add this to `mpv.conf`:

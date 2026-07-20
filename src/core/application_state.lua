@@ -11,12 +11,29 @@ function application_state.new(args)
     viewport = {w = 1280, h = 720, dpi = 1},
     controller = {
       visible = opts.always_visible,
+      input_suppressed = false,
       bounds = nil
     },
     pointer = {x = -1, y = -1, active = nil},
+    context_menu = {
+      open = false, x = 0, y = 0,
+      close_x = nil, close_y = nil, bounds = nil,
+      pending_x = nil, pending_y = nil
+    },
+    update = {
+      open = false, checking = false, busy = false, done = false,
+      dont_ask = false, mode = "ask", bounds = nil, version = nil,
+      tag = nil, notes = nil, error = nil, asset_url = nil,
+      scroll_index = 0, disable_auto_update = false, last_check = 0
+    },
     input = {hitboxes = {}, order = {}, next_id = 0},
     time = {show_remaining = false},
     seek = {dragging = false, position = nil, offset_x = 0},
+    wheel = {kind = nil, amount = 0, timer = nil},
+    edge_seek = {
+      left = {bounds = nil},
+      right = {bounds = nil}
+    },
     chapter = {
       open = false, scroll_index = 0, bounds = nil,
       dragging_scroll = false, hidden_notified = true
@@ -43,6 +60,8 @@ function application_state.new(args)
     playback_indicator = {
       last_paused = nil, last_volume = nil, last_muted = nil,
       last_subtitle_id = nil, last_sub_visibility = nil,
+      ab_loop_initialized = false, last_ab_loop_a = nil,
+      last_ab_loop_b = nil,
       icon = "play_arrow", label = nil, label_color = "#FFFFFF",
       hide_timer = nil, pill_only = false
     },
@@ -69,6 +88,15 @@ function application_state.new(args)
   runtime.controller.opacity = animation.tween({
     initial = opts.always_visible and 1 or 0, duration = 0.18
   })
+  runtime.context_menu.animation = animation.tween({
+    initial = 0, duration = 0.18
+  })
+  runtime.context_menu.width_animation = animation.spring({
+    initial = 28, stiffness = 560, damping = 38
+  })
+  runtime.context_menu.height_animation = animation.spring({
+    initial = 28, stiffness = 560, damping = 38
+  })
   runtime.volume.animation = animation.spring({initial = 0, stiffness = 360, damping = 24})
   runtime.chapter.animation = animation.spring({initial = 0, stiffness = 380, damping = 26})
   runtime.chapter.fade = animation.tween({initial = 0, duration = 0.18})
@@ -87,6 +115,15 @@ function application_state.new(args)
   runtime.settings.height_animation = animation.spring({initial = 292, stiffness = 560, damping = 38})
   runtime.playback_indicator.opacity = animation.tween({initial = 0, duration = 0.18})
   runtime.playback_indicator.scale = animation.spring({initial = 1, stiffness = 520, damping = 32})
+  for _, side in ipairs({"left", "right"}) do
+    runtime.edge_seek[side].opacity = animation.tween({initial = 0, duration = 0.15})
+    runtime.edge_seek[side].slide = animation.spring({
+      initial = 0, stiffness = 460, damping = 30
+    })
+    runtime.edge_seek[side].feedback = animation.spring({
+      initial = 0, stiffness = 620, damping = 30
+    })
+  end
   runtime.tooltip.opacity = animation.tween({initial = 0, duration = TOOLTIP_FADE_DURATION})
   runtime.tooltip.slide = animation.spring({
     initial = 0,

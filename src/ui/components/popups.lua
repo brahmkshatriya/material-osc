@@ -6,7 +6,8 @@ local function new_chapter_popup(deps)
   local ass_alpha_for_opacity = deps.ass_alpha_for_opacity
   local truncate_to_width, format_time = deps.truncate_to_width, deps.format_time
   local text_width = deps.text_width
-  local draw_box, draw_text = deps.draw_box, deps.draw_text
+  local draw_box, draw_icon, draw_text = deps.draw_box, deps.draw_icon,
+    deps.draw_text
   local default_text_font, render = deps.default_text_font, deps.render
   local Modifier, Rect = deps.Modifier, deps.Rect
   local apply_modifier_size, draw_node = deps.apply_modifier_size, deps.draw_node
@@ -25,6 +26,50 @@ local function new_chapter_popup(deps)
       selected_alpha = "00",
       modifier = Modifier():fillMaxWidth():height(dp(44))
     }
+    node.remove = {
+      modifier = Modifier():width(dp(34)):height(dp(34)):clickable({
+        name = "bookmark-remove-slot-" .. tostring(slot),
+        enabled = false,
+        on_click = function()
+          if node.chapter and deps.bookmarks:is_bookmark(node.chapter) then
+            deps.bookmarks:remove(node.chapter)
+          end
+        end
+      })
+    }
+    node.edit = {
+      modifier = Modifier():width(dp(34)):height(dp(34)):clickable({
+        name = "bookmark-edit-slot-" .. tostring(slot),
+        enabled = false,
+        on_click = function()
+          if node.chapter and deps.bookmarks:is_bookmark(node.chapter) then
+            deps.bookmarks:prompt_rename(node.chapter)
+          end
+        end
+      })
+    }
+    function node.edit:measure(parent)
+      return apply_modifier_size(self.modifier, {w = dp(34), h = dp(34)}, parent)
+    end
+    function node.edit:draw(ass, bounds)
+      if node.interactive and mouse_in(bounds) then
+        draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2,
+          bounds.h / 2, "#FFFFFF", node.hover_alpha)
+      end
+      draw_icon(ass, bounds.x + bounds.w / 2, bounds.y + bounds.h / 2,
+        "edit", "#CAC4D0", 20, node.secondary_alpha)
+    end
+    function node.remove:measure(parent)
+      return apply_modifier_size(self.modifier, {w = dp(34), h = dp(34)}, parent)
+    end
+    function node.remove:draw(ass, bounds)
+      if node.interactive and mouse_in(bounds) then
+        draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2,
+          bounds.h / 2, "#FFFFFF", node.hover_alpha)
+      end
+      draw_icon(ass, bounds.x + bounds.w / 2, bounds.y + bounds.h / 2,
+        "delete", "#CAC4D0", 20, node.secondary_alpha)
+    end
     node.modifier:clickable({
       name = "chapter-row-slot-" .. tostring(slot),
       enabled = false,
@@ -44,6 +89,9 @@ local function new_chapter_popup(deps)
       self.hover_alpha = props.hover_alpha
       self.selected_alpha = props.selected_alpha
       self.modifier.pointer_enabled = self.interactive
+      self.removable = deps.bookmarks:is_bookmark(self.chapter)
+      self.remove.modifier.pointer_enabled = self.interactive and self.removable
+      self.edit.modifier.pointer_enabled = self.interactive and self.removable
     end
     function node:measure(parent)
       if not self.chapter then return {w = 0, h = 0} end
@@ -56,9 +104,10 @@ local function new_chapter_popup(deps)
         draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2,
              bounds.h / 2, opts.accent_color, self.selected_alpha)
         local indicator_size = dp(6)
-        draw_box(ass, bounds.x + dp(14) - indicator_size / 2,
+        local indicator_x = bounds.x + dp(self.removable and 48 or 14)
+        draw_box(ass, indicator_x - indicator_size / 2,
              bounds.y + bounds.h / 2 - indicator_size / 2,
-             bounds.x + dp(14) + indicator_size / 2,
+             indicator_x + indicator_size / 2,
              bounds.y + bounds.h / 2 + indicator_size / 2,
              indicator_size / 2,
              opts.accent_color, self.text_alpha)
@@ -69,8 +118,9 @@ local function new_chapter_popup(deps)
       local seek_time = tonumber(self.chapter.time) or 0
       local time_text = format_time(seek_time)
       local title_size = 24
-      local title_x = bounds.x + dp(self.selected and 28 or 16)
-      local time_right = bounds.x2 - dp(16)
+      local title_x = bounds.x + dp(self.removable and
+        (self.selected and 60 or 48) or (self.selected and 28 or 16))
+      local time_right = bounds.x2 - dp(self.removable and 52 or 16)
       local time_left = time_right - text_width(time_text, title_size)
       local title_available_w = math.max(0, time_left - dp(16) - title_x)
       local title = self.chapter.title
@@ -85,6 +135,20 @@ local function new_chapter_popup(deps)
             self.selected and opts.accent_color or "#CAC4D0",
             self.selected and self.text_alpha or self.secondary_alpha,
             default_text_font, 6)
+      if self.removable then
+        local remove_size = dp(34)
+        local remove_x = bounds.x2 - dp(6) - remove_size
+        draw_node(self.edit, ass, Rect({
+          x = bounds.x + dp(4),
+          y = bounds.y + (bounds.h - remove_size) / 2,
+          w = remove_size, h = remove_size
+        }))
+        draw_node(self.remove, ass, Rect({
+          x = remove_x,
+          y = bounds.y + (bounds.h - remove_size) / 2,
+          w = remove_size, h = remove_size
+        }))
+      end
     end
     return node
   end
@@ -604,6 +668,8 @@ function popups.new(services)
   local select_stream_quality = player.select_stream_quality
   local open_subtitle_file_picker = player.open_subtitle_file_picker
   local open_subtitle_link_picker = player.open_subtitle_link_picker
+  local open_secondary_subtitle_file_picker = player.open_secondary_subtitle_file_picker
+  local open_secondary_subtitle_link_picker = player.open_secondary_subtitle_link_picker
   local attach_ytdl_caption = player.attach_ytdl_caption
   local set_chapter_dialog_open = navigation.set_chapter_open
   local set_subtitle_dialog_open = navigation.set_subtitle_open
@@ -731,15 +797,19 @@ function popups.new(services)
       alpha = "00", title_alpha = "00", hover_alpha = "E6", interactive = false,
       title = title or "Chapters",
       action_on_left = action_icon == "arrow_back",
+      actions = {},
       modifier = Modifier():fillMaxWidth():height(dp(56))
     }
     node.close = ChapterCloseButton({on_click = on_close, icon = action_icon})
     if right_action then
-      node.action = ChapterCloseButton({
-        name = right_action.name,
-        on_click = right_action.on_click,
-        icon = right_action.icon
-      })
+      local actions = right_action[1] and right_action or {right_action}
+      for _, action in ipairs(actions) do
+        node.actions[#node.actions + 1] = ChapterCloseButton({
+          name = action.name,
+          on_click = action.on_click,
+          icon = action.icon
+        })
+      end
     end
     function node:update(props)
       self.alpha = props.alpha
@@ -748,8 +818,8 @@ function popups.new(services)
       self.interactive = props.interactive
       self.close:update({alpha = props.alpha, hover_alpha = props.hover_alpha,
         enabled = props.interactive})
-      if self.action then
-        self.action:update({alpha = props.alpha, hover_alpha = props.hover_alpha,
+      for _, action in ipairs(self.actions) do
+        action:update({alpha = props.alpha, hover_alpha = props.hover_alpha,
           enabled = props.interactive})
       end
     end
@@ -768,9 +838,12 @@ function popups.new(services)
         w = close_size,
         h = close_size
       }))
-      if self.action then
-        draw_node(self.action, ass, Rect({
-          x = bounds.x2 - dp(12) - close_size,
+      for index, action in ipairs(self.actions) do
+        local slots_from_right = #self.actions - index
+        if not self.action_on_left then slots_from_right = slots_from_right + 1 end
+        draw_node(action, ass, Rect({
+          x = bounds.x2 - dp(12) - close_size -
+            slots_from_right * (close_size + dp(4)),
           y = bounds.y + (bounds.h - close_size) / 2,
           w = close_size,
           h = close_size
@@ -790,10 +863,12 @@ function popups.new(services)
     ass_alpha_for_opacity = ass_alpha_for_opacity,
     truncate_to_width = truncate_to_width, text_width = text_width,
     format_time = format_time,
-    draw_box = draw_box, draw_text = draw_text, default_text_font = default_text_font,
+    draw_box = draw_box, draw_icon = draw_icon, draw_text = draw_text,
+    default_text_font = default_text_font,
     render = render, Modifier = Modifier, Rect = Rect,
     apply_modifier_size = apply_modifier_size, draw_node = draw_node,
     mouse_in = mouse_in, ChapterHeader = ChapterHeader,
+    bookmarks = services.bookmarks,
     update_fields = update_fields
   })
   local ChapterPopup = chapter_widgets.ChapterPopup
@@ -1261,9 +1336,16 @@ function popups.new(services)
       secondary_footer = {label = "Link", icon = "link",
         on_click = open_subtitle_link_picker},
       right_action = {
-        name = "settings-subtitles-style",
-        icon = "subtitles_gear",
-        on_click = function() set_settings_page("subtitle_style") end
+        {
+          name = "settings-secondary-subtitles",
+          icon = "filter_2",
+          on_click = function() set_settings_page("secondary_subtitles") end
+        },
+        {
+          name = "settings-subtitles-style",
+          icon = "subtitles_gear",
+          on_click = function() set_settings_page("subtitle_style") end
+        }
       },
       state = settings_state,
       on_select = function(item)
@@ -1274,6 +1356,22 @@ function popups.new(services)
         else
           mp.set_property_number("sid", tonumber(item.id))
           mp.set_property_native("sub-visibility", true)
+        end
+      end
+    })
+    node.secondary_subtitles = TrackPopup(function() set_settings_page("subtitles") end, {
+      name = "settings-secondary-subtitles", title = "Secondary Subtitle",
+      action_icon = "arrow_back", state = settings_state,
+      footer = {label = "Add", icon = "add",
+        on_click = open_secondary_subtitle_file_picker},
+      secondary_footer = {label = "Link", icon = "link",
+        on_click = open_secondary_subtitle_link_picker},
+      on_select = function(item)
+        if item.id == 0 then
+          mp.set_property("secondary-sid", "no")
+        else
+          mp.set_property_number("secondary-sid", tonumber(item.id))
+          mp.set_property_native("secondary-sub-visibility", true)
         end
       end
     })
@@ -1329,6 +1427,10 @@ function popups.new(services)
       elseif settings_state.page == "subtitles" then
         page_props.items, page_props.active_id = self.subtitle_items, self.subtitle_id
         self.subtitles:update(page_props)
+      elseif settings_state.page == "secondary_subtitles" then
+        page_props.items = self.subtitle_items
+        page_props.active_id = self.secondary_subtitle_id
+        self.secondary_subtitles:update(page_props)
       elseif settings_state.page == "auto_captions" then
         page_props.items, page_props.active_id = {}, nil
         for _, item in ipairs(self.auto_caption_items or {}) do
@@ -1357,6 +1459,9 @@ function popups.new(services)
       if settings_state.page == "video" then return self.video:draw(ass, bounds) end
       if settings_state.page == "audio" then return self.audio:draw(ass, bounds) end
       if settings_state.page == "subtitles" then return self.subtitles:draw(ass, bounds) end
+      if settings_state.page == "secondary_subtitles" then
+        return self.secondary_subtitles:draw(ass, bounds)
+      end
       if settings_state.page == "auto_captions" then
         return self.auto_captions:draw(ass, bounds)
       end
@@ -1437,12 +1542,15 @@ function popups.new(services)
         local audio_items = snapshot.audio_items or {}
         local subtitle_items = snapshot.subtitle_items or {}
         local desired_w = (settings_state.page == "subtitles" or
+          settings_state.page == "secondary_subtitles" or
           settings_state.page == "auto_captions") and dp(420) or dp(320)
         local target_w = math.max(dp(300), math.min(desired_w, viewport.w - dp(24)))
         local item_count = settings_state.page == "video" and #video_items or
           (settings_state.page == "audio" and #audio_items or
-            (settings_state.page == "subtitles" and (#subtitle_items +
-              (ytdl_state.source == "youtube" and 1 or 0)) or
+            ((settings_state.page == "subtitles" or
+              settings_state.page == "secondary_subtitles") and
+              (#subtitle_items + (settings_state.page == "subtitles" and
+                ytdl_state.source == "youtube" and 1 or 0)) or
               (settings_state.page == "auto_captions" and
                 #ytdl_state.caption_items or 0)))
         local desired_h = settings_state.page == "root" and
@@ -1450,10 +1558,13 @@ function popups.new(services)
           (settings_state.page == "speed" and dp(190) or
             (settings_state.page == "subtitle_style" and dp(288) or
               dp(68) + math.max(1, item_count) * dp(48) +
-                (settings_state.page == "subtitles" and dp(48) or 0)))
+                ((settings_state.page == "subtitles" or
+                  settings_state.page == "secondary_subtitles") and
+                  dp(48) or 0)))
         local max_h = math.max(dp(116), math.min(dp(480), viewport.h - dp(24)))
         if settings_state.page == "video" or settings_state.page == "audio" or
           settings_state.page == "subtitles" or
+          settings_state.page == "secondary_subtitles" or
           settings_state.page == "auto_captions" then
           local whole_rows = math.max(1, math.floor((max_h - dp(68)) / dp(48)))
           max_h = dp(68) + whole_rows * dp(48)
@@ -1482,6 +1593,7 @@ function popups.new(services)
         props.audio_id = snapshot.audio_id
         props.subtitle_items = subtitle_items
         props.subtitle_id = snapshot.subtitle_id
+        props.secondary_subtitle_id = snapshot.secondary_subtitle_id
         props.auto_caption_items = ytdl_state.caption_items or {}
         props.speed_value = snapshot.speed or 1
         props.subtitle_delay = snapshot.subtitle_delay or 0

@@ -6,12 +6,32 @@ local UNIX_FILTER = "*.srt *.ass *.ssa *.vtt *.sub *.idx *.sup"
 function subtitle_loader.new(args)
   local render = args.render
 
-  local function attach_files(output)
+  local function restore_primary_subtitle(id)
+    if id and id ~= "" then mp.set_property("sid", id)
+    else mp.set_property("sid", "no") end
+  end
+
+  local function add_secondary_subtitle(source)
+    local primary_id = mp.get_property("sid", "no") or "no"
+    mp.commandv("sub-add", source, "select")
+    local added_id = mp.get_property_number("sid")
+    restore_primary_subtitle(primary_id)
+    if added_id then
+      mp.set_property_number("secondary-sid", added_id)
+      mp.set_property_native("secondary-sub-visibility", true)
+    end
+  end
+
+  local function attach_files(output, secondary)
     local added = 0
     for path in tostring(output or ""):gmatch("[^\r\n]+") do
       local clean_path = path:match("^%s*(.-)%s*$")
       if clean_path ~= "" then
-        mp.commandv("sub-add", clean_path, added == 0 and "select" or "auto")
+        if secondary and added == 0 then
+          add_secondary_subtitle(clean_path)
+        else
+          mp.commandv("sub-add", clean_path, added == 0 and "select" or "auto")
+        end
         added = added + 1
       end
     end
@@ -32,21 +52,24 @@ function subtitle_loader.new(args)
     end)
   end
 
-  local function open_file_picker()
+  local function open_file_picker(secondary)
+    local title = secondary and "Add secondary subtitle" or "Add subtitles"
+    local on_result = function(output) attach_files(output, secondary) end
     local os_name = jit and jit.os or ""
     if os_name == "Windows" then
       local script = table.concat({
         "[Console]::OutputEncoding=[Text.Encoding]::UTF8;",
         "Add-Type -AssemblyName System.Windows.Forms;",
         "$d=New-Object System.Windows.Forms.OpenFileDialog;",
+        "$d.Title='" .. title .. "';",
         "$d.Multiselect=$true;",
         "$d.Filter='Subtitle files|" .. WINDOWS_FILTER .. "|All files|*.*';",
         "if($d.ShowDialog() -eq 'OK'){[Console]::Write(($d.FileNames -join \"`n\"))}"
       }, " ")
-      run_picker({"powershell", "-NoProfile", "-Command", script})
+      run_picker({"powershell", "-NoProfile", "-Command", script}, nil, on_result)
     elseif os_name == "OSX" then
       local script = table.concat({
-        "set picked to choose file with prompt \"Add subtitles\" of type " ..
+        "set picked to choose file with prompt \"" .. title .. "\" of type " ..
           "{\"srt\", \"ass\", \"ssa\", \"vtt\", \"sub\", \"idx\", \"sup\"} " ..
           "with multiple selections allowed",
         "set output to \"\"",
@@ -55,50 +78,58 @@ function subtitle_loader.new(args)
         "end repeat",
         "return output"
       }, "\n")
-      run_picker({"osascript", "-e", script})
+      run_picker({"osascript", "-e", script}, nil, on_result)
     else
       run_picker({"zenity", "--file-selection", "--multiple",
-        "--title=Add subtitles", "--separator=\n",
+        "--title=" .. title, "--separator=\n",
         "--file-filter=Subtitle files | " .. UNIX_FILTER,
         "--file-filter=All files | *"}, function()
           run_picker({"kdialog", "--getopenfilename", "~",
             "Subtitle files (" .. UNIX_FILTER .. ")", "--multiple",
-            "--separate-output", "--title", "Add subtitles"})
-        end)
+            "--separate-output", "--title", title}, nil, on_result)
+        end, on_result)
     end
   end
 
-  local function attach_link(output)
+  local function attach_link(output, secondary)
     local url = (output or ""):match("^%s*(.-)%s*$")
     if url == "" then return end
-    mp.commandv("sub-add", url, "select")
+    if secondary then add_secondary_subtitle(url)
+    else mp.commandv("sub-add", url, "select") end
     render()
   end
 
-  local function open_link_picker()
+  local function open_link_picker(secondary)
+    local title = secondary and "Add secondary subtitle link" or "Add subtitle link"
+    local on_result = function(output) attach_link(output, secondary) end
     local os_name = jit and jit.os or ""
     if os_name == "Windows" then
       local script = table.concat({
         "Add-Type -AssemblyName Microsoft.VisualBasic;",
         "$u=[Microsoft.VisualBasic.Interaction]::InputBox(",
-        "'Enter a subtitle URL','Add subtitle link','');",
+        "'Enter a subtitle URL','" .. title .. "','');",
         "Write-Output $u"
       }, "")
-      run_picker({"powershell", "-NoProfile", "-Command", script}, nil, attach_link)
+      run_picker({"powershell", "-NoProfile", "-Command", script}, nil, on_result)
     elseif os_name == "OSX" then
       local script = "text returned of (display dialog \"Enter a subtitle URL\" " ..
-        "default answer \"\" with title \"Add subtitle link\")"
-      run_picker({"osascript", "-e", script}, nil, attach_link)
+        "default answer \"\" with title \"" .. title .. "\")"
+      run_picker({"osascript", "-e", script}, nil, on_result)
     else
-      run_picker({"zenity", "--entry", "--title=Add subtitle link",
+      run_picker({"zenity", "--entry", "--title=" .. title,
         "--text=Enter a subtitle URL:"}, function()
           run_picker({"kdialog", "--inputbox", "Enter a subtitle URL:", "",
-            "--title", "Add subtitle link"}, nil, attach_link)
-        end, attach_link)
+            "--title", title}, nil, on_result)
+        end, on_result)
     end
   end
 
-  return {open_file_picker = open_file_picker, open_link_picker = open_link_picker}
+  return {
+    open_file_picker = function() open_file_picker(false) end,
+    open_link_picker = function() open_link_picker(false) end,
+    open_secondary_file_picker = function() open_file_picker(true) end,
+    open_secondary_link_picker = function() open_link_picker(true) end
+  }
 end
 
 return subtitle_loader

@@ -74,6 +74,23 @@ function playback_indicator.new(args)
       end
       self:show_pill("subtitles", label, now)
     end
+
+    local loop_a, loop_b = snapshot.ab_loop_a, snapshot.ab_loop_b
+    if not state.ab_loop_initialized then
+      state.ab_loop_initialized = true
+      state.last_ab_loop_a, state.last_ab_loop_b = loop_a, loop_b
+    elseif state.last_ab_loop_a ~= loop_a or state.last_ab_loop_b ~= loop_b then
+      state.last_ab_loop_a, state.last_ab_loop_b = loop_a, loop_b
+      local label
+      if loop_a == nil then
+        label = "A–B loop cleared"
+      elseif loop_b == nil then
+        label = "Loop start · " .. ui.format_time(loop_a)
+      else
+        label = "Loop end · " .. ui.format_time(loop_b)
+      end
+      self:show_pill("repeat", label, now)
+    end
   end
 
   function service:draw(ass, bounds)
@@ -92,30 +109,32 @@ function playback_indicator.new(args)
       local x1, x2 = cx - pill_w / 2, cx + pill_w / 2
       local y1, y2 = cy - pill_h / 2, cy + pill_h / 2
       ui.draw_box(ass, x1, y1, x2, y2, pill_h / 2,
-        "#050708", ui.alpha(opacity * 0.84))
+        "#050708", ui.alpha(opacity * 0.84), true)
       local icon_x = x1 + horizontal_padding + icon_size / 2
       ui.draw_icon(ass, icon_x, cy, state.icon, "#FFFFFF", 26 * scale,
-        ui.alpha(opacity))
+        ui.alpha(opacity), true)
       ui.draw_text(ass, icon_x + icon_size / 2 + gap, cy,
         state.label, 26 * scale, state.label_color, ui.alpha(opacity),
-        ui.default_text_font, 4)
+        ui.default_text_font, 4, nil, true)
       return
     end
     local size = dp(160) * scale
     local cx, cy = bounds.x + bounds.w / 2, bounds.y + bounds.h / 2
     ui.draw_box(ass, cx - size / 2, cy - size / 2,
       cx + size / 2, cy + size / 2, size / 2,
-      "#050708", ui.alpha(opacity * 0.72))
-    ui.draw_icon(ass, cx, cy, state.icon, "#FFFFFF", 96 * scale, ui.alpha(opacity))
+      "#050708", ui.alpha(opacity * 0.72), true)
+    ui.draw_icon(ass, cx, cy, state.icon, "#FFFFFF", 96 * scale,
+      ui.alpha(opacity), true)
     if state.label then
       local pill_h = dp(54) * scale
       local pill_w = (ui.text_width(state.label, 28) + dp(44)) * scale
       local pill_y = cy + size / 2 + dp(12) * scale
       ui.draw_box(ass, cx - pill_w / 2, pill_y,
         cx + pill_w / 2, pill_y + pill_h, pill_h / 2,
-        "#050708", ui.alpha(opacity * 0.72))
+        "#050708", ui.alpha(opacity * 0.72), true)
       ui.draw_text(ass, cx, pill_y + pill_h / 2, state.label, 28 * scale,
-        state.label_color, ui.alpha(opacity), ui.default_text_font)
+        state.label_color, ui.alpha(opacity), ui.default_text_font,
+        nil, nil, true)
     end
   end
 
@@ -123,6 +142,8 @@ function playback_indicator.new(args)
     if state.hide_timer then state.hide_timer:kill(); state.hide_timer = nil end
     state.last_paused, state.last_volume, state.last_muted = nil, nil, nil
     state.last_subtitle_id, state.last_sub_visibility = nil, nil
+    state.ab_loop_initialized = false
+    state.last_ab_loop_a, state.last_ab_loop_b = nil, nil
     state.label = nil
     state.pill_only = false
     state.opacity:snap(0); state.scale:snap(1)

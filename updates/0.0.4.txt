@@ -1,0 +1,8 @@
+- Added a right-click context menu for copying subtitles, timestamps, and media paths; managing A–B loops and bookmarks; viewing media information; revealing media; and opening keybindings or configuration.
+- Bookmarks are saved between sessions and can now be renamed or removed.
+- Added secondary subtitle support, including external subtitle files and links.
+- Hovering either side of the video reveals animated seek controls. The outer 25% scroll zones seek, while the middle 50% adjusts volume; rapid wheel input is combined for smoother control.
+- A–B loops are now visible on the seekbar, and playback, volume, subtitle, and loop changes receive on-screen feedback from mpv.
+- Improved controller auto-hide behavior, context-menu animations, clipping, spacing, and media-information controls.
+- Configuration files are prefilled and updated with missing options, including configurable seek seconds and mouse timeout.
+- Added automatic updates with release notes and options to ask, update automatically, or stop checking.

@@ -81,7 +81,31 @@ function seekbar_renderer.new(deps)
     end
   
     draw_track_segment(x1, handle_x, opts.accent_color, "00")
-  
+
+    local loop_a = tonumber(runtime.snapshot.ab_loop_a)
+    local loop_b = tonumber(runtime.snapshot.ab_loop_b)
+    if loop_a then
+      local loop_a_x = x1 + seek_w * clamp(loop_a / duration, 0, 1)
+      local loop_x1, loop_x2
+      if loop_b then
+        local loop_b_x = x1 + seek_w * clamp(loop_b / duration, 0, 1)
+        loop_x1 = math.min(loop_a_x, loop_b_x)
+        loop_x2 = math.max(loop_a_x, loop_b_x)
+      else
+        local minimum_w = dp(4)
+        loop_x1 = clamp(loop_a_x - minimum_w / 2, x1, x2 - minimum_w)
+        loop_x2 = loop_x1 + minimum_w
+      end
+      local loop_h = dp(10)
+      local loop_y = seek_y + seek_h / 2
+      local loop_radius = math.min(dp(2), (loop_x2 - loop_x1) / 2)
+      local loop_color = loop_b and opts.accent_color or "#000000"
+      local loop_alpha = loop_b and "70" or "00"
+      draw_box(ass, loop_x1, loop_y - loop_h / 2,
+        loop_x2, loop_y + loop_h / 2, loop_radius,
+        loop_color, loop_alpha)
+    end
+
     local preview_area = {
       x1 = x1,
       y1 = seek_y - dp(6),

@@ -78,7 +78,12 @@ function render_orchestrator.new(args)
     args.app():update(runtime.snapshot)
     args.app():draw(ass, args.root_bounds(runtime.viewport))
 
-    local modal_visible = false
+    local modal_visible = runtime.context_menu.open or
+      runtime.context_menu.pending_x ~= nil or
+      runtime.context_menu.animation:is_running() or
+      runtime.context_menu.animation.value > 0.001 or
+      runtime.context_menu.width_animation:is_running() or
+      runtime.context_menu.height_animation:is_running()
     for _, name in ipairs(args.navigation.dialogs) do
       local state = runtime[name]
       modal_visible = modal_visible or state.open or state.animation:is_running()

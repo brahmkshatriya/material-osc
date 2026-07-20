@@ -64,6 +64,14 @@ def build_bundle(source_dir: Path, entry_file: Path) -> tuple[str, int]:
     return "\n".join(sections), len(lua_files)
 
 
+def embed_version(bundle: str, version: str) -> str:
+    marker = "__MATERIAL_OSC_VERSION__"
+    if marker not in bundle:
+        raise RuntimeError("Updater version marker was not found in the bundle")
+    lua_version = version.replace("\\", "\\\\").replace('"', '\\"')
+    return bundle.replace(marker, lua_version)
+
+
 def subset_symbol_font(source_dir: Path, source_font: Path, output_font: Path) -> int:
     """Keep only Material Symbol ligatures referenced by the Lua sources."""
     try:
@@ -152,6 +160,7 @@ def main() -> None:
     destination.mkdir(parents=True, exist_ok=True)
 
     bundle, module_count = build_bundle(source_dir, ENTRY_FILE)
+    bundle = embed_version(bundle, args.version)
     output.write_text(bundle, encoding="utf-8", newline="\n")
 
     legacy_fonts = destination / "fonts"

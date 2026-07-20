@@ -40,10 +40,15 @@ function mpv_runtime.new(args)
     state.timers.frame = nil
     if state.timers.hide then state.timers.hide:kill() end
     state.timers.hide = nil
+    if state.wheel.timer then state.wheel.timer:kill() end
+    state.wheel.kind, state.wheel.amount, state.wheel.timer = nil, 0, nil
   end
 
   function service:on_file_loaded()
     state.media.loading = false
+    if state.wheel.timer then state.wheel.timer:kill() end
+    state.wheel.kind, state.wheel.amount, state.wheel.timer = nil, 0, nil
+    args.close_context_menu()
     args.directory_playlist:load()
     args.navigation:reset()
     args.playback_indicator:reset()
@@ -53,6 +58,7 @@ function mpv_runtime.new(args)
     end
     args.stream_quality:load()
     args.stream_quality:restore_subtitles()
+    args.bookmarks:restore()
     args.render()
   end
 
@@ -66,6 +72,7 @@ function mpv_runtime.new(args)
       {"pause", "bool"}, {"mute", "bool"}, {"volume", "number"},
       {"duration", "number"}, {"time-pos", "number"}, {"chapter", "number"},
       {"chapter-list", "native"}, {"track-list", "native"}, {"sid", "number"},
+      {"secondary-sid", "number"}, {"secondary-sub-visibility", "bool"},
       {"aid", "number"}, {"speed", "number"}, {"sub-visibility", "bool"},
       {"fullscreen", "bool"}, {"seeking", "bool"},
       {"paused-for-cache", "bool"}, {"cache-buffering-state", "number"},
@@ -73,6 +80,7 @@ function mpv_runtime.new(args)
       {"video-out-params", "native"}, {"demuxer-via-network", "bool"},
       {"playlist", "native"}, {"playlist-pos", "number"},
       {"loop-playlist", "string"}, {"loop-file", "string"},
+      {"ab-loop-a", "number"}, {"ab-loop-b", "number"}, {"sub-text", "string"},
       {"shuffle", "bool"}, {"media-title", "string"}
     }) do mp.observe_property(property[1], property[2], args.render) end
     mp.observe_property("display-fps", "number", function() self:update_rate() end)
@@ -87,10 +95,14 @@ function mpv_runtime.new(args)
     mp.set_key_bindings({
       {"mouse_move", move}, {"mouse_leave", leave},
       {"mbtn_left_dbl", function() controller():on_primary_double() end},
+      {"mbtn_right", function() controller():on_secondary_down() end},
       {"wheel_up", function() controller():on_wheel(-1) end},
       {"wheel_down", function() controller():on_wheel(1) end}
     }, "material-osc-input", "force")
     mp.enable_key_bindings("material-osc-input", "allow-hide-cursor")
+    mp.set_key_bindings({{"ESC", args.close_context_menu}},
+      "material-osc-context-menu", "force")
+    mp.disable_key_bindings("material-osc-context-menu")
     for _, name in ipairs({"controller", "volume-popup"}) do
       local binding = "material-osc-" .. name
       mp.set_key_bindings({{"mouse_move", move}, {"mouse_leave", leave}}, binding, "force")

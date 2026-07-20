@@ -1,10 +1,12 @@
 local options = require "mp.options"
 local opts = {
-  timeout = 2,
+  mouse_timeout = 2,
   always_visible = false,
   directory_playlist = true,
   directory_playlist_sort = "name",
+  context_menu = true,
   tooltip = true,
+  seek_step_seconds = 5,
   dpi_scale = "auto",
   accent_color = "#00bbff",
   volume_max = 150
@@ -30,7 +32,12 @@ local navigation_module = require "src.core.navigation"
 local mpv_runtime_module = require "src.core.mpv_runtime"
 
 local compose_module = require "src.ui.compose"
+local context_menu_module = require "src.ui.components.context_menu"
+local media_information_close_module =
+  require "src.ui.components.media_information_close"
+local update_dialog_module = require "src.ui.components.update_dialog"
 local playback_indicator_module = require "src.ui.components.playback_indicator"
+local edge_seek_module = require "src.ui.components.edge_seek"
 local seekbar_renderer_module = require "src.ui.components.seekbar_renderer"
 local loading_indicator = require "src.ui.loading_indicator"
 local ui_renderer_module = require "src.ui.renderer"
@@ -44,6 +51,9 @@ local directory_playlist_module = require "src.services.directory_playlist"
 local stream_quality_module = require "src.services.stream_quality"
 local subtitle_loader_module = require "src.services.subtitle_loader"
 local thumbnail_module = require "src.services.thumbnail_service"
+local bookmark_service_module = require "src.services.bookmark_service"
+local context_actions_module = require "src.services.context_actions"
+local update_service_module = require "src.services.update_service"
 
 mp.set_property("osc", "no")
 mp.set_property_bool("auto-window-resize", false)
@@ -69,6 +79,10 @@ local function create_app(services)
   node.tooltip = controls.TooltipHost()
   node.chapter = popups.ChapterDialogHost()
   node.settings = popups.SettingsDialogHost()
+  node.context_menu = context_menu_module.new(services)
+  node.media_information_close = media_information_close_module.new(services)
+  node.update_dialog = update_dialog_module.new(services)
+  node.edge_seek = edge_seek_module.new(services)
 
   function node:update(snapshot)
     if snapshot.video_present or state.media.loading then
@@ -81,12 +95,22 @@ local function create_app(services)
     end
     self.controls:update(snapshot)
     self.playlist_controls:update(snapshot)
-    local modal = state.playlist.open or state.playlist.animation:is_running() or
+    local context_visible = state.context_menu.open or
+      state.context_menu.pending_x ~= nil or
+      state.context_menu.animation:is_running() or
+      state.context_menu.animation.value > 0.001 or
+      state.context_menu.width_animation:is_running() or
+      state.context_menu.height_animation:is_running()
+    local modal = state.update.open or context_visible or state.playlist.open or
+      state.playlist.animation:is_running() or
       state.chapter.open or state.chapter.animation.value > 0.001 or
       state.settings.open or state.settings.animation.value > 0.001
     self.tooltip:set_suppressed(state.controller.opacity.value <= 0 or modal)
     self.chapter:update(snapshot)
     self.settings:update(snapshot)
+    if context_visible then self.context_menu:update(snapshot) end
+    self.media_information_close:update()
+    if state.update.open then self.update_dialog:update(snapshot) end
   end
 
   function node:draw(ass, root)
@@ -94,23 +118,37 @@ local function create_app(services)
     if self.no_video_opacity > 0 then
       local icon_size = math.min(root.w, root.h) * 0.34 / ui.dp(1)
       services.ui.draw_icon(ass, root.x + root.w / 2, root.y + root.h / 2,
-        "music_note", "#FFFFFF", icon_size,
+        "music_note_2", "#FFFFFF", icon_size,
         services.ui.alpha(self.no_video_opacity), true)
     end
     if state.snapshot.buffering then services.loading.draw(ass) end
     services.playback_indicator:draw(ass, root)
+    self.edge_seek:draw(ass, root)
 
     local playlist_visible = state.playlist.open or state.playlist.animation:is_running()
     local chapter_visible = state.chapter.open or state.chapter.animation.value > 0.001
     local settings_visible = state.settings.open or state.settings.animation.value > 0.001
+    local context_visible = state.context_menu.open or
+      state.context_menu.pending_x ~= nil or
+      state.context_menu.animation:is_running() or
+      state.context_menu.animation.value > 0.001 or
+      state.context_menu.width_animation:is_running() or
+      state.context_menu.height_animation:is_running()
     local pointer_x, pointer_y = state.pointer.x, state.pointer.y
-    if playlist_visible or chapter_visible or settings_visible then
+    if playlist_visible or chapter_visible or settings_visible or
+      context_visible then
       state.pointer.x, state.pointer.y = -1, -1
     end
     if state.controller.opacity.value > 0 then
       state.controller.bounds = ui.draw_node(self.controller, ass, root)
     else
-      state.controller.bounds = nil
+      local size = ui.measure_node(self.controller, root)
+      state.controller.bounds = ui.Rect({
+        x = root.x,
+        y = root.y2 - size.h,
+        w = size.w,
+        h = size.h
+      })
       state.volume.popup_bounds, state.volume.button_bounds = nil, nil
     end
     state.pointer.x, state.pointer.y = pointer_x, pointer_y
@@ -119,6 +157,9 @@ local function create_app(services)
     if playlist_visible then self.playlist_controls:draw_expanded(ass, root)
     elseif chapter_visible then ui.draw_node(self.chapter, ass, root)
     elseif settings_visible then ui.draw_node(self.settings, ass, root) end
+    if context_visible then ui.draw_node(self.context_menu, ass, root) end
+    if state.update.open then ui.draw_node(self.update_dialog, ass, root) end
+    ui.draw_node(self.media_information_close, ass, root)
   end
 
   return node
@@ -191,11 +232,86 @@ local function set_settings_page(page) navigation:set_settings_page(page) end
 local function toggle_subtitles() navigation:toggle_subtitles() end
 local function cycle_subtitle(direction) navigation:cycle_subtitle(direction) end
 
+local function set_context_close_anchor(click_x, click_y)
+  local bounds = runtime.context_menu.bounds
+  if bounds and click_x and click_y then
+    runtime.context_menu.close_x = clamp(click_x, bounds.x1, bounds.x2)
+    runtime.context_menu.close_y = clamp(click_y, bounds.y1, bounds.y2)
+  else
+    runtime.context_menu.close_x, runtime.context_menu.close_y = nil, nil
+  end
+end
+
+local function close_context_menu(click_x, click_y)
+  if not runtime.context_menu.open and
+    not runtime.context_menu.pending_x then return end
+  local was_switching = runtime.context_menu.pending_x ~= nil
+  runtime.context_menu.pending_x, runtime.context_menu.pending_y = nil, nil
+  if click_x and click_y then
+    set_context_close_anchor(click_x, click_y)
+  elseif not was_switching then
+    set_context_close_anchor(nil, nil)
+  end
+  runtime.context_menu.open = false
+  mp.disable_key_bindings("material-osc-context-menu")
+  if render then render() end
+end
+
+local function open_context_menu(x, y)
+  if not opts.context_menu then return end
+  if runtime.update.open then return end
+  if runtime.context_menu.open or runtime.context_menu.pending_x then
+    runtime.context_menu.pending_x, runtime.context_menu.pending_y = x, y
+    set_context_close_anchor(x, y)
+    runtime.context_menu.open = false
+    runtime.context_menu.animation:set_target(0, mp.get_time(), 0.10)
+    mp.enable_key_bindings("material-osc-context-menu")
+    if render then render() end
+    return
+  end
+  navigation:close_others(nil)
+  navigation:cancel_pointer_gestures()
+  runtime.context_menu.open = true
+  runtime.context_menu.x, runtime.context_menu.y = x, y
+  runtime.context_menu.pending_x, runtime.context_menu.pending_y = nil, nil
+  runtime.context_menu.close_x, runtime.context_menu.close_y = nil, nil
+  mp.enable_key_bindings("material-osc-context-menu")
+  if render then render() end
+end
+
 local subtitle_loader = subtitle_loader_module.new({
   render = function(...) return render(...) end
 })
 local open_subtitle_file_picker = subtitle_loader.open_file_picker
 local open_subtitle_link_picker = subtitle_loader.open_link_picker
+local open_secondary_subtitle_file_picker = subtitle_loader.open_secondary_file_picker
+local open_secondary_subtitle_link_picker = subtitle_loader.open_secondary_link_picker
+
+local controller
+local bookmark_service = bookmark_service_module.new({
+  mp = mp, utils = utils, format_time = format_time,
+  render = function(...) return render(...) end,
+  set_input_active = function(active)
+    runtime.controller.input_suppressed = active
+    if runtime.timers.hide then
+      runtime.timers.hide:kill()
+      runtime.timers.hide = nil
+    end
+    if controller then
+      if active then controller:animate_visibility(false)
+      else controller:show() end
+    elseif render then
+      runtime.controller.visible = not active
+      runtime.controller.opacity:set_target(active and 0 or 1, mp.get_time(), 0.18)
+      render()
+    end
+  end
+})
+local context_actions = context_actions_module.new({
+  mp = mp, utils = utils, format_time = format_time,
+  bookmarks = bookmark_service, opts = opts,
+  render = function(...) return render(...) end
+})
 
 local stream_quality = stream_quality_module.new({
   runtime = runtime, utils = utils,
@@ -272,8 +388,17 @@ local apply_modifier_size, measure_node = compose.apply_modifier_size, compose.m
 local draw_node = compose.draw_node
 local IconButton, TextItem = compose.IconButton, compose.TextItem
 local Visibility, Row, Column, Pill = compose.Visibility, compose.Row, compose.Column, compose.Pill
+local updater = update_service_module.new({
+  state = runtime, mp = mp, utils = utils, msg = msg,
+  script_path = script_source, font_dir = asset_paths.font_dir,
+  render = function() if render then render() end end
+})
 local services = {
   state = runtime,
+  updater = updater,
+  bookmarks = bookmark_service,
+  context_actions = context_actions,
+  close_context_menu = close_context_menu,
   config = {
     opts = opts, tooltip_delay = tooltip_service.delay,
     tooltip_slide_distance = tooltip_service.slide_distance,
@@ -286,6 +411,7 @@ local services = {
   },
   ui = {
     dp = dp, clamp = clamp, smooth_step = smooth_step, lerp = lerp,
+    dpi_scale = function() return ui_renderer:dpi_scale() end,
     alpha = ass_alpha_for_opacity, draw_rect = draw_rect, draw_box = draw_box,
     draw_round_box = draw_round_box,
     draw_icon = draw_icon, draw_text = draw_text, draw_seekbar = draw_seekbar,
@@ -306,6 +432,8 @@ local services = {
     select_stream_quality = select_stream_quality,
     open_subtitle_file_picker = open_subtitle_file_picker,
     open_subtitle_link_picker = open_subtitle_link_picker,
+    open_secondary_subtitle_file_picker = open_secondary_subtitle_file_picker,
+    open_secondary_subtitle_link_picker = open_secondary_subtitle_link_picker,
     attach_ytdl_caption = attach_ytdl_caption
   },
   navigation = {
@@ -338,12 +466,13 @@ local function update_animation_targets(now)
   animation_coordinator:update(now)
 end
 
-local controller
 local runtime_host = mpv_runtime_module.new({
   state = runtime, mp = mp, navigation = navigation,
   playback_indicator = playback_indicator,
   stream_quality = stream_quality,
   directory_playlist = directory_playlist,
+  bookmarks = bookmark_service,
+  close_context_menu = close_context_menu,
   controller = function() return controller end,
   render = function() render() end
 })
@@ -382,7 +511,10 @@ controller = controller_module.new({
   runtime = runtime, mp = mp, opts = opts, navigation = navigation,
   thumbnail = thumbnail_service, mouse_in = mouse_in,
   hitbox_at_cursor = hitbox_at_cursor,
+  open_context_menu = open_context_menu,
   render = function() render() end, recreate_app = recreate_app
 })
 
 runtime_host:start()
+if opts.always_visible then controller:show() end
+updater:start()
