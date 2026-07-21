@@ -80,8 +80,8 @@ network=yes
 
 The repository keeps the complete Material Symbols Rounded TTF for development.
 Release builds automatically subset it to the icons referenced by the Lua sources.
-The generated fonts are placed directly under `material-osc/`, alongside the
-bundled `material-osc.lua` script directory.
+The generated archive places renamed fonts under `fonts/` and the bundled Lua
+script under `scripts/`, ready to extract into the mpv configuration directory.
 
 ```bash
 python -m venv .venv

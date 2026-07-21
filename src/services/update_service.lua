@@ -140,7 +140,7 @@ function update_service.new(args)
     end
     state.asset_url = nil
     for _, asset in ipairs(release.assets or {}) do
-      if tostring(asset.name or ""):match("^material%-osc%-.+%.zip$") then
+      if tostring(asset.name or "") == "material-osc.zip" then
         state.asset_url = asset.browser_download_url
         break
       end
@@ -182,12 +182,15 @@ function update_service.new(args)
   end
 
   local function install_extracted(directory)
-    local source_script = utils.join_path(directory, "material-osc.lua")
+    local source_script = utils.join_path(
+      utils.join_path(directory, "scripts"), "material-osc.lua")
     local ok, reason = replace_file(source_script, args.script_path)
     if not ok then return false, reason end
     ensure_directory(args.font_dir .. package.config:sub(1, 1) .. "placeholder")
-    for _, font in ipairs({"GoogleSansFlex.ttf", "MaterialSymbolsRoundedUnfilled.ttf"}) do
-      local source = utils.join_path(utils.join_path(directory, "material-osc"), font)
+    for _, font in ipairs({
+      "material-osc_google_sans_flex.ttf", "material-osc_icons.otf"
+    }) do
+      local source = utils.join_path(utils.join_path(directory, "fonts"), font)
       local target = utils.join_path(args.font_dir, font)
       if utils.file_info(source) then
         ok, reason = replace_file(source, target)

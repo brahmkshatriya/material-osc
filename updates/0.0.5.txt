@@ -1,0 +1,5 @@
+### Please Delete the old installation files. (didnt know the folder structure norms :p)
+- Sorry, but the automatic update will fail with a missing archive error. Please update manually.
+- Release archives now use the consistent `material-osc.zip` filename with extract-ready `fonts/` and `scripts/` directories, and the updater recognizes the new layout. #6
+- Audio track selection now shows the track language even when it is not included in the title. #7
+- Added video controls for crop presets, Stretch and Fit to Screen modes, gamma, brightness, saturation, rotation, and runtime GLSL shaders loaded from files or links. #4

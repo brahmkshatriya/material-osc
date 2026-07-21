@@ -10,11 +10,13 @@ end
 
 function assets.initialize(args)
   local directory = script_directory(args.script_dir)
+  local release_font_dir = args.utils.join_path(directory, "../fonts")
   local candidates = {
+    release_font_dir,
+    args.utils.join_path(directory, "../../fonts"),
     args.utils.join_path(directory, "material-osc"),
     args.utils.join_path(directory, "material-osc/fonts"),
-    args.utils.join_path(directory, "fonts"),
-    args.utils.join_path(directory, "../fonts")
+    args.utils.join_path(directory, "fonts")
   }
   local font_dir = candidates[1]
   for _, candidate in ipairs(candidates) do
@@ -26,7 +28,11 @@ function assets.initialize(args)
   args.msg.verbose("loading local OSD and subtitle font directory: " .. font_dir)
   mp.set_property("osd-fonts-dir", font_dir)
   mp.set_property("sub-fonts-dir", font_dir)
-  return {script_dir = directory, font_dir = font_dir}
+  return {
+    script_dir = directory,
+    font_dir = font_dir,
+    release_font_dir = release_font_dir
+  }
 end
 
 return assets

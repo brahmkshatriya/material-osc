@@ -387,7 +387,7 @@ local function new_track_popup(deps)
   local mouse_in, ChapterHeader = deps.mouse_in, deps.ChapterHeader
   local VerticalScrollbar, update_fields = deps.VerticalScrollbar, deps.update_fields
   local subtitle_state, audio_state = deps.subtitle_state, deps.audio_state
-  local function TrackRow(slot, on_selected, name_prefix)
+  local function TrackRow(slot, on_selected, name_prefix, on_action)
     local node = {
       item = nil, active = false, interactive = false,
       text_alpha = "00", secondary_alpha = "00",
@@ -400,10 +400,35 @@ local function new_track_popup(deps)
         if node.item then on_selected(node.item) end
       end
     })
+    node.action = {
+      modifier = Modifier():width(dp(34)):height(dp(34)):clickable({
+        name = name_prefix .. "-action-slot-" .. tostring(slot),
+        enabled = false,
+        on_click = function()
+          if node.item and node.item.action_icon and on_action then
+            on_action(node.item)
+          end
+        end
+      })
+    }
+    function node.action:measure(parent)
+      return apply_modifier_size(self.modifier, {w = dp(34), h = dp(34)}, parent)
+    end
+    function node.action:draw(ass, bounds)
+      if node.interactive and mouse_in(bounds) then
+        draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2,
+          bounds.h / 2, "#FFFFFF", node.hover_alpha)
+      end
+      draw_icon(ass, bounds.x + bounds.w / 2, bounds.y + bounds.h / 2,
+        node.item.action_icon, "#CAC4D0", 20, node.secondary_alpha)
+    end
     function node:update(props)
+      self.item = props.item
       update_fields(self, props)
       self.modifier.pointer_enabled = self.interactive and self.item ~= nil and
         not self.item.separator
+      self.action.modifier.pointer_enabled = self.interactive and self.item ~= nil and
+        self.item.action_icon ~= nil and not self.item.loading
     end
     function node:measure(parent)
       if not self.item then return {w = 0, h = 0} end
@@ -445,7 +470,9 @@ local function new_track_popup(deps)
       local text_right = bounds.x2 - dp(16)
       if self.item.loading then
         text_right = bounds.x2 - dp(40)
-      elseif self.item.language and not has_details then
+      elseif self.item.action_icon then
+        text_right = text_right - dp(40)
+      elseif self.item.language then
         text_right = text_right - text_width(self.item.language, 24) - dp(16)
       end
       local text_available_w = math.max(0, text_right - text_x)
@@ -463,7 +490,12 @@ local function new_track_popup(deps)
       if self.item.loading then
         draw_loading_shape_morph(ass, bounds.x2 - dp(20),
           bounds.y + bounds.h / 2, dp(22))
-      elseif self.item.language and not has_details then
+      elseif self.item.action_icon then
+        draw_node(self.action, ass, Rect({
+          x = bounds.x2 - dp(40), y = bounds.y + (bounds.h - dp(34)) / 2,
+          w = dp(34), h = dp(34)
+        }))
+      elseif self.item.language then
         draw_text(ass, bounds.x2 - dp(16), bounds.y + bounds.h / 2,
           self.item.language, 24,
           self.active and opts.accent_color or "#CAC4D0",
@@ -535,7 +567,7 @@ local function new_track_popup(deps)
       if should_close ~= false then on_close() end
     end
     for slot = 1, 16 do
-      node.rows[slot] = TrackRow(slot, select, config.name)
+      node.rows[slot] = TrackRow(slot, select, config.name, config.on_action)
     end
     function node:update(props)
       update_fields(self, props)
@@ -589,7 +621,7 @@ local function new_track_popup(deps)
       local footer_height = self.footer and dp(48) or 0
       local list = Rect({x = bounds.x + dp(8), y = bounds.y + header_h + dp(8),
         w = bounds.w - dp(16) - (self.max_scroll > 0 and dp(20) or 0),
-        h = layout_height - header_h - dp(16) - footer_height})
+        h = math.max(0, layout_height - header_h - dp(16) - footer_height)})
       for slot, row in ipairs(self.rows) do
         if not row.item then break end
         local y = list.y + (slot - 1) * dp(48)
@@ -670,6 +702,9 @@ function popups.new(services)
   local open_subtitle_link_picker = player.open_subtitle_link_picker
   local open_secondary_subtitle_file_picker = player.open_secondary_subtitle_file_picker
   local open_secondary_subtitle_link_picker = player.open_secondary_subtitle_link_picker
+  local open_shader_file_picker = player.open_shader_file_picker
+  local open_shader_link_picker = player.open_shader_link_picker
+  local remove_shader, clear_shaders = player.remove_shader, player.clear_shaders
   local attach_ytdl_caption = player.attach_ytdl_caption
   local set_chapter_dialog_open = navigation.set_chapter_open
   local set_subtitle_dialog_open = navigation.set_subtitle_open
@@ -894,7 +929,7 @@ function popups.new(services)
       icon = icon, label = "", value = "", loading = false,
       interactive = false, text_alpha = "00",
       secondary_alpha = "00", hover_alpha = "00",
-      modifier = Modifier():fillMaxWidth():height(dp(52)):clickable({
+      modifier = Modifier():fillMaxWidth():height(dp(44)):clickable({
         name = name, enabled = false, on_click = on_click
       })
     }
@@ -903,7 +938,7 @@ function popups.new(services)
       self.modifier.pointer_enabled = self.interactive
     end
     function node:measure(parent)
-      return apply_modifier_size(self.modifier, {w = 0, h = dp(52)}, parent)
+      return apply_modifier_size(self.modifier, {w = 0, h = dp(44)}, parent)
     end
     function node:draw(ass, bounds)
       if self.interactive and mouse_in(bounds) then
@@ -1138,9 +1173,24 @@ function popups.new(services)
       modifier = Modifier():fillMaxWidth():height(dp(44))
     }
     local function button(suffix, text, on_click)
-      local item = {text = text, modifier = Modifier():width(dp(34)):height(dp(34)):clickable({
-        name = name .. "-" .. suffix, enabled = false, on_click = on_click
-      })}
+      local item = {text = text, repeat_delay = nil, repeat_timer = nil}
+      local function stop_repeat()
+        if item.repeat_delay then item.repeat_delay:kill(); item.repeat_delay = nil end
+        if item.repeat_timer then item.repeat_timer:kill(); item.repeat_timer = nil end
+      end
+      local function start_repeat()
+        stop_repeat()
+        on_click()
+        item.repeat_delay = mp.add_timeout(0.38, function()
+          item.repeat_delay = nil
+          item.repeat_timer = mp.add_periodic_timer(0.08, on_click)
+        end)
+      end
+      item.stop_repeat = stop_repeat
+      item.modifier = Modifier():width(dp(34)):height(dp(34)):clickable({
+        name = name .. "-" .. suffix, enabled = false,
+        on_press = start_repeat, on_release = stop_repeat
+      })
       function item:measure(parent)
         return apply_modifier_size(self.modifier, {w = dp(34), h = dp(34)}, parent)
       end
@@ -1160,6 +1210,10 @@ function popups.new(services)
       update_fields(self, props)
       self.decrease.modifier.pointer_enabled = self.interactive
       self.increase.modifier.pointer_enabled = self.interactive
+      if not self.interactive then
+        self.decrease.stop_repeat()
+        self.increase.stop_repeat()
+      end
     end
     function node:measure(parent) return {w = parent.w, h = dp(44)} end
     function node:draw(ass, bounds)
@@ -1295,6 +1349,297 @@ function popups.new(services)
     return node
   end
 
+  local crop_presets = {
+    {label = "Original", value = "", mode = "original"},
+    {label = "Stretch", value = "stretch", mode = "stretch"},
+    {label = "Fit to Screen", value = "fit", mode = "fit"},
+    {label = "16:9", value = "16:9", ratio = 16 / 9},
+    {label = "21:9", value = "21:9", ratio = 21 / 9},
+    {label = "4:3", value = "4:3", ratio = 4 / 3},
+    {label = "1:1", value = "1:1", ratio = 1},
+    {label = "9:16", value = "9:16", ratio = 9 / 16}
+  }
+
+  local function crop_preset_value(value)
+    value = tostring(value or "")
+    if value == "" then return "" end
+    local width, height = value:match("^(%d+)[xX](%d+)")
+    width, height = tonumber(width), tonumber(height)
+    if not width or not height or height <= 0 then return nil end
+    local ratio = width / height
+    for _, preset in ipairs(crop_presets) do
+      if preset.ratio and math.abs(ratio - preset.ratio) < 0.015 then
+        return preset.value
+      end
+    end
+    return nil
+  end
+
+  local function crop_label(value, keepaspect, panscan)
+    local selected
+    if keepaspect == false then selected = "stretch"
+    elseif (tonumber(panscan) or 0) > 0.99 and tostring(value or "") == "" then
+      selected = "fit"
+    else selected = crop_preset_value(value) end
+    for _, preset in ipairs(crop_presets) do
+      if preset.value == selected then return preset.label end
+    end
+    value = tostring(value or "")
+    return value == "" and "Original" or value
+  end
+
+  local function apply_crop_preset(item)
+    if item.mode == "stretch" then
+      mp.set_property("video-crop", "")
+      mp.set_property_native("keepaspect", false)
+      mp.set_property_number("panscan", 0)
+      return
+    elseif item.mode == "fit" then
+      mp.set_property("video-crop", "")
+      mp.set_property_native("keepaspect", true)
+      mp.set_property_number("panscan", 1)
+      return
+    elseif not item.ratio then
+      mp.set_property("video-crop", "")
+      mp.set_property_native("keepaspect", true)
+      mp.set_property_number("panscan", 0)
+      return
+    end
+    mp.set_property_native("keepaspect", true)
+    mp.set_property_number("panscan", 0)
+    local params = mp.get_property_native("video-dec-params") or {}
+    local width, height = tonumber(params.w), tonumber(params.h)
+    if not width or not height or width <= 0 or height <= 0 then
+      mp.osd_message("Video dimensions are unavailable", 2)
+      return
+    end
+    local pixel_aspect = 1
+    local display_width, display_height = tonumber(params.dw), tonumber(params.dh)
+    if display_width and display_height and display_width > 0 and display_height > 0 then
+      pixel_aspect = (display_width / display_height) / (width / height)
+    end
+    local target_pixel_ratio = item.ratio / pixel_aspect
+    local crop_width, crop_height = width, height
+    if width / height > target_pixel_ratio then
+      crop_width = math.floor(height * target_pixel_ratio / 2 + 0.5) * 2
+    else
+      crop_height = math.floor(width / target_pixel_ratio / 2 + 0.5) * 2
+    end
+    crop_width = clamp(crop_width, 2, width)
+    crop_height = clamp(crop_height, 2, height)
+    mp.set_property("video-crop", string.format("%dx%d", crop_width, crop_height))
+  end
+
+  local function CropPill(name, item)
+    local node = {
+      item = item, selected = false, interactive = false,
+      text_alpha = "00", hover_alpha = "00", selected_alpha = "00",
+      modifier = Modifier():height(dp(42)):clickable({
+        name = name, enabled = false,
+        on_click = function() apply_crop_preset(item) end
+      })
+    }
+    function node:update(props)
+      update_fields(self, props)
+      self.modifier.pointer_enabled = self.interactive
+    end
+    function node:measure(parent)
+      return apply_modifier_size(self.modifier, {w = parent.w, h = dp(42)}, parent)
+    end
+    function node:draw(ass, bounds)
+      local hovered = self.interactive and mouse_in(bounds)
+      draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2,
+        bounds.h / 2, self.selected and opts.accent_color or "#FFFFFF",
+        self.selected and self.selected_alpha or (hovered and self.hover_alpha or "D8"))
+      local icon = self.item.icon
+      if icon then
+        local icon_size, gap = dp(20), dp(6)
+        local label_width = text_width(self.item.label, 19)
+        local group_width = icon_size + gap + label_width
+        local start_x = bounds.x + (bounds.w - group_width) / 2
+        draw_icon(ass, start_x + icon_size / 2,
+          bounds.y + bounds.h / 2, icon, "#FFFFFF", 20, self.text_alpha)
+        draw_text(ass, start_x + icon_size + gap, bounds.y + bounds.h / 2,
+          self.item.label, 19, "#FFFFFF", self.text_alpha,
+          default_text_font, 4)
+      else
+        draw_text(ass, bounds.x + bounds.w / 2, bounds.y + bounds.h / 2,
+          self.item.label, 19, "#FFFFFF", self.text_alpha,
+          default_text_font, nil, false, false)
+      end
+    end
+    return node
+  end
+
+  local function VideoCropPopup(on_back)
+    local node = {
+      width = dp(400), height = dp(164), selected = "", interactive = false,
+      panel_alpha = "00", text_alpha = "00", hover_alpha = "00",
+      selected_alpha = "00", modifier = Modifier():clickable({
+        name = "video-crop-panel", enabled = false, on_click = function() end
+      })
+    }
+    node.header = ChapterHeader(on_back, "Crop", "arrow_back")
+    node.mode_pills, node.ratio_pills = {}, {}
+    for index, preset in ipairs(crop_presets) do
+      if preset.mode then
+        preset.icon = preset.mode == "original" and "aspect_ratio" or
+          (preset.mode == "stretch" and "open_in_full" or "fit_screen")
+        node.mode_pills[#node.mode_pills + 1] = CropPill(
+          "video-crop-mode-" .. tostring(index), preset)
+      else
+        node.ratio_pills[#node.ratio_pills + 1] = CropPill(
+          "video-crop-ratio-" .. tostring(index), preset)
+      end
+    end
+    function node:update(props)
+      update_fields(self, props)
+      self.modifier.fixed_width, self.modifier.fixed_height = self.width, self.height
+      self.modifier.pointer_enabled = self.interactive
+      self.header:update({alpha = self.text_alpha, hover_alpha = self.hover_alpha,
+        interactive = self.interactive})
+      local common = {interactive = self.interactive, text_alpha = self.text_alpha,
+        hover_alpha = self.hover_alpha, selected_alpha = self.selected_alpha}
+      for _, pill in ipairs(self.mode_pills) do
+        common.selected = pill.item.value == self.selected
+        pill:update(common)
+      end
+      for _, pill in ipairs(self.ratio_pills) do
+        common.selected = pill.item.value == self.selected
+        pill:update(common)
+      end
+    end
+    function node:measure(parent)
+      return apply_modifier_size(self.modifier, {w = self.width, h = self.height}, parent)
+    end
+    function node:draw(ass, bounds)
+      draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2,
+        dp(30), "#050708", self.panel_alpha)
+      draw_node(self.header, ass, Rect({x = bounds.x, y = bounds.y,
+        w = bounds.w, h = dp(56)}))
+      local inset, gap = dp(8), dp(8)
+      local mode_width = (bounds.w - inset * 2 - gap * 2) / 3
+      local x, y = bounds.x + inset, bounds.y + dp(64)
+      for _, pill in ipairs(self.mode_pills) do
+        draw_node(pill, ass, Rect({x = x, y = y, w = mode_width, h = dp(42)}))
+        x = x + mode_width + gap
+      end
+      local ratio_gap = gap
+      local ratio_width = (bounds.w - inset * 2 -
+        ratio_gap * (#self.ratio_pills - 1)) / #self.ratio_pills
+      x, y = bounds.x + inset, bounds.y + dp(114)
+      for _, pill in ipairs(self.ratio_pills) do
+        draw_node(pill, ass, Rect({x = x, y = y, w = ratio_width, h = dp(42)}))
+        x = x + ratio_width + ratio_gap
+      end
+    end
+    return node
+  end
+
+  local function VideoSettingsPopup(on_back)
+    local node = {
+      width = dp(380), height = dp(332), interactive = false,
+      panel_alpha = "00", text_alpha = "00", secondary_alpha = "00",
+      hover_alpha = "00", crop = "", gamma = 0, brightness = 0,
+      saturation = 0, rotation = 0, shader_count = 0,
+      keepaspect = true, panscan = 0,
+      modifier = Modifier():clickable({
+        name = "video-settings-panel", enabled = false, on_click = function() end
+      })
+    }
+    local function reset_video_settings()
+      mp.set_property("video-crop", "")
+      mp.set_property_native("keepaspect", true)
+      mp.set_property_number("panscan", 0)
+      mp.set_property_number("gamma", 0)
+      mp.set_property_number("brightness", 0)
+      mp.set_property_number("saturation", 0)
+      mp.set_property_number("video-rotate", 0)
+    end
+    node.header = ChapterHeader(on_back, "Video Settings", "arrow_back", {
+      name = "video-settings-reset", icon = "restart_alt",
+      on_click = reset_video_settings
+    })
+    node.crop_row = SettingsActionRow("video-settings-crop", "crop",
+      function() set_settings_page("video_crop") end)
+    node.gamma_row = SubtitleAdjustRow("video-settings-gamma", "Gamma",
+      function()
+        mp.set_property_number("gamma", clamp(node.gamma - 5, -100, 100))
+      end,
+      function()
+        mp.set_property_number("gamma", clamp(node.gamma + 5, -100, 100))
+      end)
+    node.brightness_row = SubtitleAdjustRow(
+      "video-settings-brightness", "Brightness",
+      function()
+        mp.set_property_number("brightness", clamp(node.brightness - 5, -100, 100))
+      end,
+      function()
+        mp.set_property_number("brightness", clamp(node.brightness + 5, -100, 100))
+      end)
+    node.saturation_row = SubtitleAdjustRow(
+      "video-settings-saturation", "Saturation",
+      function()
+        mp.set_property_number("saturation", clamp(node.saturation - 5, -100, 100))
+      end,
+      function()
+        mp.set_property_number("saturation", clamp(node.saturation + 5, -100, 100))
+      end)
+    node.rotation_row = SubtitleAdjustRow("video-settings-rotation", "Rotate",
+      function()
+        mp.set_property_number("video-rotate", (node.rotation - 90) % 360)
+      end,
+      function()
+        mp.set_property_number("video-rotate", (node.rotation + 90) % 360)
+      end)
+    node.shaders_row = SettingsActionRow("video-settings-shaders", "texture",
+      function() set_settings_page("video_shaders") end)
+    function node:update(props)
+      update_fields(self, props)
+      self.modifier.fixed_width, self.modifier.fixed_height = self.width, self.height
+      self.modifier.pointer_enabled = self.interactive
+      self.header:update({alpha = self.text_alpha, hover_alpha = self.hover_alpha,
+        interactive = self.interactive})
+      local common = {interactive = self.interactive, text_alpha = self.text_alpha,
+        secondary_alpha = self.secondary_alpha, hover_alpha = self.hover_alpha}
+      common.label, common.value = "Crop",
+        crop_label(self.crop, self.keepaspect, self.panscan)
+      self.crop_row:update(common)
+      common.label = nil
+      common.value = string.format("%+d", math.floor(self.gamma + 0.5))
+      self.gamma_row:update(common)
+      common.value = string.format("%+d", math.floor(self.brightness + 0.5))
+      self.brightness_row:update(common)
+      common.value = string.format("%+d", math.floor(self.saturation + 0.5))
+      self.saturation_row:update(common)
+      common.value = string.format("%d°", math.floor(self.rotation + 0.5) % 360)
+      self.rotation_row:update(common)
+      common.label, common.value = "Shaders", tostring(self.shader_count)
+      self.shaders_row:update(common)
+    end
+    function node:measure(parent)
+      return apply_modifier_size(self.modifier, {w = self.width, h = self.height}, parent)
+    end
+    function node:draw(ass, bounds)
+      draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2,
+        dp(30), "#050708", self.panel_alpha)
+      draw_node(self.header, ass, Rect({x = bounds.x, y = bounds.y,
+        w = bounds.w, h = dp(56)}))
+      local rows = {
+        {self.crop_row, 44}, {self.gamma_row, 44},
+        {self.brightness_row, 44}, {self.saturation_row, 44},
+        {self.rotation_row, 44}, {self.shaders_row, 44}
+      }
+      local y = bounds.y + dp(60)
+      for _, entry in ipairs(rows) do
+        draw_node(entry[1], ass, Rect({x = bounds.x + dp(8), y = y,
+          w = bounds.w - dp(16), h = dp(entry[2])}))
+        y = y + dp(entry[2])
+      end
+    end
+    return node
+  end
+
   local function SettingsPopup(on_close)
     local node = {
       width = dp(480), height = dp(260), interactive = false,
@@ -1313,6 +1658,10 @@ function popups.new(services)
       function() set_settings_page("speed") end)
     node.video = TrackPopup(function() set_settings_page("root") end, {
       name = "settings-video", title = "Video Track", action_icon = "arrow_back",
+      right_action = {
+        name = "settings-video-options", icon = "tune",
+        on_click = function() set_settings_page("video_settings") end
+      },
       state = settings_state,
       on_select = function(item)
         if item.image then
@@ -1385,8 +1734,42 @@ function popups.new(services)
     })
     node.speed = SpeedPopup(function() set_settings_page("root") end)
     node.subtitle_style = SubtitleStylePopup(function() set_settings_page("subtitles") end)
+    node.video_settings = VideoSettingsPopup(function()
+      set_settings_page("video")
+    end)
+    node.video_crop = VideoCropPopup(function()
+      set_settings_page("video_settings")
+    end)
+    node.video_shaders = TrackPopup(function()
+      set_settings_page("video_settings")
+    end, {
+      name = "settings-video-shaders", title = "Shaders", action_icon = "arrow_back",
+      state = settings_state,
+      footer = {label = "Add", icon = "add", on_click = open_shader_file_picker},
+      secondary_footer = {label = "Link", icon = "link",
+        on_click = open_shader_link_picker},
+      right_action = {
+        name = "settings-video-shaders-clear", icon = "delete_sweep",
+        on_click = clear_shaders
+      },
+      is_selected = function() return false end,
+      on_action = function(item)
+        remove_shader(item.id)
+      end,
+      on_select = function()
+        return false
+      end
+    })
     function node:update(props)
       update_fields(self, props)
+      if self.video_keepaspect == false then
+        self.video_crop_selected = "stretch"
+      elseif (tonumber(self.video_panscan) or 0) > 0.99 and
+        tostring(self.video_crop_value or "") == "" then
+        self.video_crop_selected = "fit"
+      else
+        self.video_crop_selected = crop_preset_value(self.video_crop_value)
+      end
       self.modifier.fixed_width, self.modifier.fixed_height = self.width, self.height
       self.modifier.pointer_enabled = self.interactive
       local common = {interactive = self.interactive, text_alpha = self.text_alpha,
@@ -1450,6 +1833,22 @@ function popups.new(services)
         page_props.color = self.subtitle_color
         page_props.font = self.subtitle_font
         self.subtitle_style:update(page_props)
+      elseif settings_state.page == "video_settings" then
+        page_props.crop = self.video_crop_value
+        page_props.keepaspect = self.video_keepaspect
+        page_props.panscan = self.video_panscan
+        page_props.gamma = self.video_gamma
+        page_props.brightness = self.video_brightness
+        page_props.saturation = self.video_saturation
+        page_props.rotation = self.video_rotation
+        page_props.shader_count = #self.shader_items
+        self.video_settings:update(page_props)
+      elseif settings_state.page == "video_crop" then
+        page_props.selected = self.video_crop_selected
+        self.video_crop:update(page_props)
+      elseif settings_state.page == "video_shaders" then
+        page_props.items = self.shader_items
+        self.video_shaders:update(page_props)
       end
     end
     function node:measure(parent)
@@ -1469,19 +1868,27 @@ function popups.new(services)
       if settings_state.page == "subtitle_style" then
         return self.subtitle_style:draw(ass, bounds)
       end
+      if settings_state.page == "video_settings" then
+        return self.video_settings:draw(ass, bounds)
+      end
+      if settings_state.page == "video_crop" then
+        return self.video_crop:draw(ass, bounds)
+      end
+      if settings_state.page == "video_shaders" then
+        return self.video_shaders:draw(ass, bounds)
+      end
       draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2,
         dp(30), "#050708", self.panel_alpha)
       draw_node(self.header, ass, Rect({x = bounds.x, y = bounds.y, w = bounds.w, h = dp(56)}))
       local y = bounds.y + dp(64)
-      local rows = {}
-      if #self.video_items > 1 then rows[#rows + 1] = self.video_row end
+      local rows = {self.video_row}
       rows[#rows + 1] = self.audio_row
       rows[#rows + 1] = self.subtitle_row
       rows[#rows + 1] = self.speed_row
       for _, row in ipairs(rows) do
         draw_node(row, ass, Rect({x = bounds.x + dp(8), y = y,
-          w = bounds.w - dp(16), h = dp(52)}))
-        y = y + dp(56)
+          w = bounds.w - dp(16), h = dp(44)}))
+        y = y + dp(48)
       end
     end
     return node
@@ -1541,31 +1948,48 @@ function popups.new(services)
         local video_items = snapshot.video_items or {}
         local audio_items = snapshot.audio_items or {}
         local subtitle_items = snapshot.subtitle_items or {}
-        local desired_w = (settings_state.page == "subtitles" or
+        local wide_page = settings_state.page == "subtitles" or
           settings_state.page == "secondary_subtitles" or
-          settings_state.page == "auto_captions") and dp(420) or dp(320)
+          settings_state.page == "auto_captions" or
+          settings_state.page == "video_shaders"
+        local desired_w = wide_page and dp(420) or
+          (settings_state.page == "video_crop" and dp(400) or
+            (settings_state.page == "video_settings" and dp(380) or dp(320)))
         local target_w = math.max(dp(300), math.min(desired_w, viewport.w - dp(24)))
-        local item_count = settings_state.page == "video" and #video_items or
-          (settings_state.page == "audio" and #audio_items or
-            ((settings_state.page == "subtitles" or
-              settings_state.page == "secondary_subtitles") and
-              (#subtitle_items + (settings_state.page == "subtitles" and
-                ytdl_state.source == "youtube" and 1 or 0)) or
-              (settings_state.page == "auto_captions" and
-                #ytdl_state.caption_items or 0)))
-        local desired_h = settings_state.page == "root" and
-          dp(#video_items > 1 and 292 or 236) or
-          (settings_state.page == "speed" and dp(190) or
-            (settings_state.page == "subtitle_style" and dp(288) or
-              dp(68) + math.max(1, item_count) * dp(48) +
-                ((settings_state.page == "subtitles" or
-                  settings_state.page == "secondary_subtitles") and
-                  dp(48) or 0)))
+        local item_count = 0
+        if settings_state.page == "video" then item_count = #video_items
+        elseif settings_state.page == "audio" then item_count = #audio_items
+        elseif settings_state.page == "subtitles" or
+          settings_state.page == "secondary_subtitles" then
+          item_count = #subtitle_items + (settings_state.page == "subtitles" and
+            ytdl_state.source == "youtube" and 1 or 0)
+        elseif settings_state.page == "auto_captions" then
+          item_count = #ytdl_state.caption_items
+        elseif settings_state.page == "video_shaders" then
+          item_count = #(snapshot.shader_items or {})
+        end
+        local desired_h
+        if settings_state.page == "root" then
+          desired_h = dp(260)
+        elseif settings_state.page == "speed" then desired_h = dp(190)
+        elseif settings_state.page == "subtitle_style" then desired_h = dp(288)
+        elseif settings_state.page == "video_settings" then desired_h = dp(332)
+        elseif settings_state.page == "video_crop" then desired_h = dp(164)
+        elseif settings_state.page == "video_shaders" and item_count == 0 then
+          desired_h = dp(116)
+        else
+          local has_footer = settings_state.page == "subtitles" or
+            settings_state.page == "secondary_subtitles" or
+            settings_state.page == "video_shaders"
+          desired_h = dp(68) + math.max(1, item_count) * dp(48) +
+            (has_footer and dp(48) or 0)
+        end
         local max_h = math.max(dp(116), math.min(dp(480), viewport.h - dp(24)))
         if settings_state.page == "video" or settings_state.page == "audio" or
           settings_state.page == "subtitles" or
           settings_state.page == "secondary_subtitles" or
-          settings_state.page == "auto_captions" then
+          settings_state.page == "auto_captions" or
+          settings_state.page == "video_shaders" then
           local whole_rows = math.max(1, math.floor((max_h - dp(68)) / dp(48)))
           max_h = dp(68) + whole_rows * dp(48)
         end
@@ -1601,6 +2025,14 @@ function popups.new(services)
         props.subtitle_border_size = snapshot.subtitle_border_size or 1.65
         props.subtitle_color = snapshot.subtitle_color or "#FFFFFFFF"
         props.subtitle_font = snapshot.subtitle_font or "sans-serif"
+        props.video_crop_value = snapshot.video_crop or ""
+        props.video_keepaspect = snapshot.video_keepaspect ~= false
+        props.video_panscan = snapshot.video_panscan or 0
+        props.video_gamma = snapshot.video_gamma or 0
+        props.video_brightness = snapshot.video_brightness or 0
+        props.video_saturation = snapshot.video_saturation or 0
+        props.video_rotation = snapshot.video_rotation or 0
+        props.shader_items = snapshot.shader_items or {}
         popup:update(props)
       end
     })

@@ -81,7 +81,11 @@ function mpv_runtime.new(args)
       {"playlist", "native"}, {"playlist-pos", "number"},
       {"loop-playlist", "string"}, {"loop-file", "string"},
       {"ab-loop-a", "number"}, {"ab-loop-b", "number"}, {"sub-text", "string"},
-      {"shuffle", "bool"}, {"media-title", "string"}
+      {"shuffle", "bool"}, {"media-title", "string"},
+      {"video-crop", "string"}, {"keepaspect", "bool"},
+      {"panscan", "number"}, {"video-rotate", "number"},
+      {"gamma", "number"}, {"brightness", "number"},
+      {"saturation", "number"}, {"glsl-shaders", "native"}
     }) do mp.observe_property(property[1], property[2], args.render) end
     mp.observe_property("display-fps", "number", function() self:update_rate() end)
     mp.observe_property("estimated-display-fps", "number", function() self:update_rate() end)

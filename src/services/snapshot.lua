@@ -67,6 +67,19 @@ function snapshot.reader(deps)
     local subtitle_items = {{id = 0, label = "Off", language = nil}}
     local audio_id = mp.get_property_number("aid", 0) or 0
     local audio_items = {{id = 0, label = "Off", language = nil}}
+    local shader_items = {}
+    local shaders = mp.get_property_native("glsl-shaders") or {}
+    if type(shaders) == "table" then
+      for _, path in ipairs(shaders) do
+        path = tostring(path)
+        shader_items[#shader_items + 1] = {
+          id = path,
+          label = path:match("([^/\\]+)$") or path,
+          details = path,
+          action_icon = "delete"
+        }
+      end
+    end
     local function technical_details(track, kind)
       local details = {}
       local codec = track.codec
@@ -210,6 +223,14 @@ function snapshot.reader(deps)
       subtitle_border_size = mp.get_property_number("sub-border-size", 1.65) or 1.65,
       subtitle_color = mp.get_property("sub-color", "#FFFFFFFF") or "#FFFFFFFF",
       subtitle_font = mp.get_property("sub-font", "sans-serif") or "sans-serif",
+      video_crop = mp.get_property("video-crop", "") or "",
+      video_keepaspect = mp.get_property_native("keepaspect") ~= false,
+      video_panscan = mp.get_property_number("panscan", 0) or 0,
+      video_gamma = mp.get_property_number("gamma", 0) or 0,
+      video_brightness = mp.get_property_number("brightness", 0) or 0,
+      video_saturation = mp.get_property_number("saturation", 0) or 0,
+      video_rotation = mp.get_property_number("video-rotate", 0) or 0,
+      shader_items = shader_items,
       volume_max = math.max(100, mp.get_property_number("volume-max", configured_volume_max) or configured_volume_max),
       chapter_index = chapter_index,
       chapters = chapters,

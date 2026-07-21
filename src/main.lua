@@ -50,6 +50,7 @@ local player_module = require "src.services.player"
 local directory_playlist_module = require "src.services.directory_playlist"
 local stream_quality_module = require "src.services.stream_quality"
 local subtitle_loader_module = require "src.services.subtitle_loader"
+local shader_loader_module = require "src.services.shader_loader"
 local thumbnail_module = require "src.services.thumbnail_service"
 local bookmark_service_module = require "src.services.bookmark_service"
 local context_actions_module = require "src.services.context_actions"
@@ -286,6 +287,10 @@ local open_subtitle_file_picker = subtitle_loader.open_file_picker
 local open_subtitle_link_picker = subtitle_loader.open_link_picker
 local open_secondary_subtitle_file_picker = subtitle_loader.open_secondary_file_picker
 local open_secondary_subtitle_link_picker = subtitle_loader.open_secondary_link_picker
+local shader_loader = shader_loader_module.new({
+  mp = mp, utils = utils, msg = msg,
+  render = function(...) return render(...) end
+})
 
 local controller
 local bookmark_service = bookmark_service_module.new({
@@ -390,7 +395,7 @@ local IconButton, TextItem = compose.IconButton, compose.TextItem
 local Visibility, Row, Column, Pill = compose.Visibility, compose.Row, compose.Column, compose.Pill
 local updater = update_service_module.new({
   state = runtime, mp = mp, utils = utils, msg = msg,
-  script_path = script_source, font_dir = asset_paths.font_dir,
+  script_path = script_source, font_dir = asset_paths.release_font_dir,
   render = function() if render then render() end end
 })
 local services = {
@@ -434,6 +439,10 @@ local services = {
     open_subtitle_link_picker = open_subtitle_link_picker,
     open_secondary_subtitle_file_picker = open_secondary_subtitle_file_picker,
     open_secondary_subtitle_link_picker = open_secondary_subtitle_link_picker,
+    open_shader_file_picker = shader_loader.open_file_picker,
+    open_shader_link_picker = shader_loader.open_link_picker,
+    remove_shader = shader_loader.remove,
+    clear_shaders = shader_loader.clear,
     attach_ytdl_caption = attach_ytdl_caption
   },
   navigation = {

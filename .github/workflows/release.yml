@@ -25,8 +25,8 @@ jobs:
           test -f "updates/$GITHUB_REF_NAME.txt"
           python3 bundle.py "$GITHUB_REF_NAME"
           cd "build/$GITHUB_REF_NAME"
-          zip -r "$GITHUB_WORKSPACE/material-osc-$GITHUB_REF_NAME.zip" \
-            material-osc.lua material-osc
+          zip -r "$GITHUB_WORKSPACE/material-osc.zip" \
+            fonts scripts
 
       - name: Prepare release description
         shell: bash
@@ -41,4 +41,4 @@ jobs:
           name: ${{ github.ref_name }}
           body_path: release-body.md
           generate_release_notes: true
-          files: material-osc-${{ github.ref_name }}.zip
+          files: material-osc.zip

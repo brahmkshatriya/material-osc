@@ -2,7 +2,7 @@ local text_metrics = {}
 
 local UTF8_CHARACTER = "[%z\1-\127\194-\244][\128-\191]*"
 
--- These are the default-instance metrics from fonts/GoogleSansFlex.ttf.  libass
+-- These are the default-instance metrics from material-osc_google_sans_flex.ttf. libass
 -- normalizes this font against the OS/2 Windows ascent + descent (2452 + 999),
 -- rather than its 2000 unit em.  Keeping the source font units here avoids
 -- rounding every glyph before a complete run has been measured.
