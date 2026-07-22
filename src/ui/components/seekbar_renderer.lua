@@ -112,7 +112,7 @@ function seekbar_renderer.new(deps)
       x2 = x2,
       y2 = seek_y + seek_h + dp(6)
     }
-    local hovering_seek = mouse_in(preview_area)
+    local hovering_seek = runtime.controller.visible and mouse_in(preview_area)
     local handle_h = dp(hovering_seek and 24 or 22)
     local handle_y = seek_y + seek_h / 2
     draw_box(ass, handle_x - handle_w / 2, handle_y - handle_h / 2,

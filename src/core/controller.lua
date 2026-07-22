@@ -13,7 +13,16 @@ function controller.new(args)
     if runtime.controller.input_suppressed then
       visible = false
     end
+    local was_visible = runtime.controller.visible or
+      runtime.controller.opacity.value > 0.001 or
+      runtime.controller.opacity:is_running()
     runtime.controller.visible = visible
+    if visible then
+      runtime.controller.hide_cursor_after_fade = false
+      args.set_cursor_autohide("no")
+    elseif was_visible then
+      runtime.controller.hide_cursor_after_fade = true
+    end
     runtime.controller.opacity:set_target(visible and 1 or 0, mp.get_time(), 0.18)
     if not visible then args.thumbnail:clear() end
     args.render()
@@ -29,7 +38,7 @@ function controller.new(args)
     if opts.mouse_timeout <= 0 then return end
     runtime.timers.hide = mp.add_timeout(opts.mouse_timeout, function()
       self:update_mouse()
-      if self:should_show_at_pointer() then
+      if self:interaction_requires_visibility() then
         self:show()
       else
         self:animate_visibility(false)
@@ -37,7 +46,7 @@ function controller.new(args)
     end)
   end
 
-  function service:should_show_at_pointer()
+  function service:interaction_requires_visibility()
     if runtime.update.open then return true end
     if runtime.seek.dragging or runtime.volume.dragging then
       return true
@@ -45,13 +54,18 @@ function controller.new(args)
     for _, name in ipairs(args.navigation.dialogs) do
       if runtime[name].open then return true end
     end
+    return false
+  end
+
+  function service:should_show_at_pointer()
+    if self:interaction_requires_visibility() then return true end
     return (runtime.controller.bounds and args.mouse_in(runtime.controller.bounds)) or
       (runtime.volume.popup_bounds and args.mouse_in(runtime.volume.popup_bounds)) or false
   end
 
   function service:sync_visibility_with_pointer()
     local pointer_active = runtime.pointer.x >= 0 and runtime.pointer.y >= 0
-    if (opts.always_visible and pointer_active) or self:should_show_at_pointer() then
+    if (opts.show_on_mouse_move and pointer_active) or self:should_show_at_pointer() then
       self:show()
     else
       if runtime.timers.hide then
@@ -63,6 +77,9 @@ function controller.new(args)
   end
 
   function service:on_mouse_move()
+    local cursor_timeout = math.max(100,
+      math.floor(math.max(0, tonumber(opts.mouse_timeout) or 0) * 1000 + 0.5))
+    args.set_cursor_autohide(cursor_timeout)
     self:update_mouse()
     local active = runtime.pointer.active
     if active and active.on_move then active.on_move(active) end
@@ -204,7 +221,9 @@ function controller.new(args)
 
     local width = math.max(1, runtime.viewport.w)
     local horizontal_position = runtime.pointer.x / width
-    if horizontal_position < 0.25 or horizontal_position > 0.75 then
+    local seeking_zone = opts.seeking_zone_percentage / 100
+    if horizontal_position < seeking_zone or
+      horizontal_position > 1 - seeking_zone then
       local step = math.max(1, tonumber(opts.seek_step_seconds) or 5)
       local amount = direction < 0 and step or -step
       self:queue_wheel("seek", amount)

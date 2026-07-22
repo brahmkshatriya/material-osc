@@ -1,5 +1,27 @@
 local context_actions = {}
 
+local function sanitize_configuration(existing, order)
+  local allowed = {}
+  for _, name in ipairs(order) do
+    allowed[name] = true
+  end
+
+  local configured, lines = {}, {}
+  local removed_unused = false
+  for line in (existing .. "\n"):gmatch("(.-)\n") do
+    local name = line:match("^%s*([%w_-]+)%s*=")
+    if name and not allowed[name] then
+      removed_unused = true
+    else
+      lines[#lines + 1] = line
+      if name then configured[name] = true end
+    end
+  end
+
+  local preserved = table.concat(lines, "\n"):gsub("%s+$", "")
+  return preserved, configured, removed_unused
+end
+
 function context_actions.new(args)
   local mp, utils = args.mp, args.utils
   local service = {}
@@ -145,21 +167,26 @@ function context_actions.new(args)
       if file then existing = file:read("*a") or ""; file:close() end
     end
     local order = {
-      "mouse_timeout", "always_visible", "directory_playlist",
-      "directory_playlist_sort", "context_menu", "tooltip",
-      "seek_step_seconds", "dpi_scale",
-      "accent_color", "volume_max"
+      "dpi_scale",
+      "accent_color",
+      "context_menu",
+      "tooltip",
+      "mouse_timeout",
+      "show_on_mouse_move",
+      "single_click_actions_enabled",
+      "seeking_zone_percentage",
+      "seek_step_seconds",
+      "max_volume_percentage",
+      "directory_playlist",
+      "directory_playlist_sort"
     }
-    local configured = {}
-    for line in (existing .. "\n"):gmatch("(.-)\n") do
-      local name = line:match("^%s*([%w_-]+)%s*=")
-      if name then configured[name] = true end
-    end
+    local preserved, configured, removed_unused =
+      sanitize_configuration(existing, order)
     local missing = {}
     for _, name in ipairs(order) do
       if not configured[name] then missing[#missing + 1] = name end
     end
-    if #missing > 0 then
+    if #missing > 0 or removed_unused then
       local function config_value(value)
         if type(value) == "boolean" then return value and "yes" or "no" end
         local text = tostring(value)
@@ -167,7 +194,6 @@ function context_actions.new(args)
         return text
       end
       local lines = {}
-      local preserved = existing:gsub("%s+$", "")
       if preserved ~= "" then
         lines[#lines + 1] = preserved
         lines[#lines + 1] = ""
@@ -234,5 +260,7 @@ function context_actions.new(args)
 
   return service
 end
+
+context_actions.sanitize_configuration = sanitize_configuration
 
 return context_actions

@@ -51,6 +51,12 @@ function animation_coordinator.new(args)
       runtime.playlist.animation:is_running() or
       runtime.chapter.open or runtime.chapter.animation.value > 0.001 or
       runtime.settings.open or runtime.settings.animation.value > 0.001
+    if runtime.controller.hide_cursor_after_fade and not modal and
+      not runtime.controller.opacity:is_running() and
+      runtime.controller.opacity.value <= 0.001 then
+      runtime.controller.hide_cursor_after_fade = false
+      args.hide_cursor()
+    end
     local wants_volume = not modal and (runtime.volume.dragging or
       (runtime.volume.button_bounds and args.mouse_in(runtime.volume.button_bounds)) or
       (runtime.volume.popup_bounds and args.mouse_in(runtime.volume.popup_bounds)))
@@ -82,9 +88,10 @@ function animation_coordinator.new(args)
     local over_controller = controller_bounds and args.mouse_in(controller_bounds)
     local edge_modal = modal or runtime.subtitle.open or runtime.audio.open or
       runtime.subtitle.animation:is_running() or runtime.audio.animation:is_running()
-    local edge_allowed = not edge_modal and not over_controller and
+    local edge_allowed = args.single_click_actions_enabled() and
+      not edge_modal and not over_controller and
       pointer.x >= 0 and pointer.y >= 0
-    local edge_width = runtime.viewport.w * 0.25
+    local edge_width = runtime.viewport.w * args.seeking_zone_fraction()
     local wants_left = edge_allowed and pointer.x <= edge_width
     local wants_right = edge_allowed and pointer.x >= runtime.viewport.w - edge_width
     for _, item in ipairs({

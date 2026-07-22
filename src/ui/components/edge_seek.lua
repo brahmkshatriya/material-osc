@@ -5,6 +5,7 @@ function edge_seek.new(services)
   local opts = services.config.opts
   local render = services.effects.render
   local step = math.max(1, tonumber(opts.seek_step_seconds) or 5)
+  local zone_fraction = opts.seeking_zone_percentage / 100
   local step_label = string.format("%g", step)
   local service = {}
 
@@ -18,7 +19,7 @@ function edge_seek.new(services)
   local function register_hitbox(side, bounds, amount)
     local name = "edge-seek-" .. side
     bounds.name = name
-    bounds.enabled = not modal_open()
+    bounds.enabled = opts.single_click_actions_enabled and not modal_open()
     bounds.on_click = function()
       mp.commandv("seek", tostring(amount), "relative")
       local visual = state.edge_seek[side]
@@ -42,7 +43,9 @@ function edge_seek.new(services)
       not visual.slide:is_running() then return end
 
     local dp = ui.dp
-    local cx = root.x + root.w * (direction < 0 and 0.16 or 0.84)
+    local center_fraction = zone_fraction * 0.64
+    local cx = root.x + root.w *
+      (direction < 0 and center_fraction or 1 - center_fraction)
     local cy = root.y + root.h * 0.46
     local slide = visual.slide.value
     cx = cx + direction * dp(28) * (1 - slide)
@@ -66,7 +69,7 @@ function edge_seek.new(services)
   end
 
   function service:draw(ass, root)
-    local zone_w = root.w * 0.25
+    local zone_w = root.w * zone_fraction
     local zone_h = state.controller.bounds and
       math.max(0, state.controller.bounds.y1 - root.y) or root.h
     local left = ui.Rect({x = root.x, y = root.y, w = zone_w, h = zone_h})

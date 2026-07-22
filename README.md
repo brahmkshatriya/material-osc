@@ -35,8 +35,16 @@ color. Set `context_menu=no` to disable the right-click context menu. Restart
 mpv after changing the file. `mouse_timeout` controls how many seconds the
 controls remain visible after pointer activity. `seek_step_seconds` controls
 how many seconds the left and right edge actions seek backward or forward.
-With `always_visible=yes`, pointer activity anywhere reveals the controls; they
-still hide after `mouse_timeout` when the pointer is outside the controller.
+`seeking_zone_percentage` controls the width of each edge seeking zone as a
+percentage of the window and defaults to `15`. Set
+`single_click_actions_enabled=no` to disable single-click play/pause and edge
+seeking while keeping double-click fullscreen. With `show_on_mouse_move=no`
+(the default), the control bar is revealed only when the pointer reaches the
+bottom. Set it to `yes` to reveal the bar after pointer movement anywhere; it
+still hides after `mouse_timeout` without pointer movement, even when the
+pointer rests over the control bar. The mouse cursor remains visible during the
+fade and hides when it completes. `max_volume_percentage` sets the upper volume
+limit and defaults to `150`.
 
 On other platforms, place the same file at
 `<mpv config directory>/script-opts/material-osc.conf`.

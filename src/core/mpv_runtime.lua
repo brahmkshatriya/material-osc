@@ -2,7 +2,17 @@ local mpv_runtime = {}
 
 function mpv_runtime.new(args)
   local state, mp = args.state, args.mp
-  local service = {}
+  local service = {
+    original_cursor_autohide = nil,
+    cursor_autohide = nil
+  }
+
+  function service:set_cursor_autohide(value)
+    value = tostring(value)
+    if self.cursor_autohide == value then return end
+    self.cursor_autohide = value
+    mp.set_property("cursor-autohide", value)
+  end
 
   function service:update_mouse_area()
     mp.set_mouse_area(0, 0, 0, 0, "material-osc-showhide")
@@ -53,6 +63,9 @@ function mpv_runtime.new(args)
     state.timers.hide = nil
     if state.wheel.timer then state.wheel.timer:kill() end
     state.wheel.kind, state.wheel.amount, state.wheel.timer = nil, 0, nil
+    if self.original_cursor_autohide ~= nil then
+      mp.set_property("cursor-autohide", self.original_cursor_autohide)
+    end
   end
 
   function service:on_file_loaded()
@@ -74,6 +87,8 @@ function mpv_runtime.new(args)
   end
 
   function service:start()
+    self.original_cursor_autohide = mp.get_property("cursor-autohide")
+    self.cursor_autohide = self.original_cursor_autohide
     local function controller() return args.controller() end
     mp.observe_property("osd-dimensions", "native",
       function(...) controller():on_dimensions(...) end)

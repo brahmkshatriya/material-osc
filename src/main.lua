@@ -1,7 +1,9 @@
 local options = require "mp.options"
 local opts = {
   mouse_timeout = 2,
-  always_visible = false,
+  show_on_mouse_move = false,
+  single_click_actions_enabled = true,
+  seeking_zone_percentage = 15,
   directory_playlist = true,
   directory_playlist_sort = "name",
   context_menu = true,
@@ -9,9 +11,11 @@ local opts = {
   seek_step_seconds = 5,
   dpi_scale = "auto",
   accent_color = "#00bbff",
-  volume_max = 150
+  max_volume_percentage = 150
 }
 options.read_options(opts, "material-osc")
+opts.seeking_zone_percentage = math.max(0,
+  math.min(50, tonumber(opts.seeking_zone_percentage) or 15))
 
 local assdraw = require "mp.assdraw"
 local msg = require "mp.msg"
@@ -226,8 +230,9 @@ local truncate_utf8 = text_metrics.truncate
 local text_intrinsic_width = text_metrics.width
 local truncate_utf8_to_width = text_metrics.truncate_to_width
 
-local configured_volume_max = math.max(100, tonumber(opts.volume_max) or 150)
-mp.set_property_number("volume-max", configured_volume_max)
+local max_volume_percentage = math.max(
+  100, tonumber(opts.max_volume_percentage) or 150)
+mp.set_property_number("volume-max", max_volume_percentage)
 
 local ass_color = function(hex) return ui_renderer:ass_color(hex) end
 local ass_alpha_for_opacity = function(opacity) return ui_renderer:alpha(opacity) end
@@ -432,7 +437,7 @@ local services = {
   config = {
     opts = opts, tooltip_delay = tooltip_service.delay,
     tooltip_slide_distance = tooltip_service.slide_distance,
-    volume_max = configured_volume_max
+    max_volume_percentage = max_volume_percentage
   },
   platform = {msg = msg, utils = utils},
   effects = {
@@ -491,16 +496,24 @@ local app = create_app(services)
 local read_player_snapshot = snapshot_module.reader({
   runtime = runtime, format_time = format_time,
   friendly_quality_label = stream_quality_module.quality_label,
-  configured_volume_max = configured_volume_max, is_buffering = is_buffering
+  max_volume_percentage = max_volume_percentage, is_buffering = is_buffering
 })
+local runtime_host
 local animation_coordinator = animation_coordinator_module.new({
-  runtime = runtime, mouse_in = mouse_in, tooltip = tooltip_service
+  runtime = runtime, mouse_in = mouse_in, tooltip = tooltip_service,
+  single_click_actions_enabled = function()
+    return opts.single_click_actions_enabled
+  end,
+  seeking_zone_fraction = function()
+    return opts.seeking_zone_percentage / 100
+  end,
+  hide_cursor = function() runtime_host:set_cursor_autohide("always") end
 })
 local function update_animation_targets(now)
   animation_coordinator:update(now)
 end
 
-local runtime_host = mpv_runtime_module.new({
+runtime_host = mpv_runtime_module.new({
   state = runtime, mp = mp, navigation = navigation,
   playback_indicator = playback_indicator,
   stream_quality = stream_quality,
@@ -565,9 +578,12 @@ controller = controller_module.new({
   thumbnail = thumbnail_service, mouse_in = mouse_in,
   hitbox_at_cursor = hitbox_at_cursor,
   open_context_menu = open_context_menu,
+  set_cursor_autohide = function(value)
+    runtime_host:set_cursor_autohide(value)
+  end,
   render = function() render() end, recreate_app = recreate_app
 })
 
 runtime_host:start()
-if opts.always_visible then controller:show() end
+if opts.show_on_mouse_move then controller:show() end
 updater:start()

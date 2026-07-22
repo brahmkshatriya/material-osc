@@ -10,8 +10,9 @@ function application_state.new(args)
   local runtime = {
     viewport = {w = 1280, h = 720, dpi = 1},
     controller = {
-      visible = opts.always_visible,
+      visible = opts.show_on_mouse_move,
       input_suppressed = false,
+      hide_cursor_after_fade = false,
       bounds = nil
     },
     pointer = {x = -1, y = -1, active = nil},
@@ -86,7 +87,7 @@ function application_state.new(args)
   }
 
   runtime.controller.opacity = animation.tween({
-    initial = opts.always_visible and 1 or 0, duration = 0.18
+    initial = opts.show_on_mouse_move and 1 or 0, duration = 0.18
   })
   runtime.context_menu.animation = animation.tween({
     initial = 0, duration = 0.18

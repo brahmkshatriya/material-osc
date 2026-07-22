@@ -6,7 +6,7 @@ function snapshot.reader(deps)
   local friendly_quality_label = deps.friendly_quality_label
   assert(type(friendly_quality_label) == "function",
     "snapshot.reader requires friendly_quality_label")
-  local configured_volume_max = deps.configured_volume_max
+  local max_volume_percentage = deps.max_volume_percentage
   local is_buffering = deps.is_buffering
 
   return function()
@@ -231,7 +231,9 @@ function snapshot.reader(deps)
       video_saturation = mp.get_property_number("saturation", 0) or 0,
       video_rotation = mp.get_property_number("video-rotate", 0) or 0,
       shader_items = shader_items,
-      volume_max = math.max(100, mp.get_property_number("volume-max", configured_volume_max) or configured_volume_max),
+      max_volume_percentage = math.max(100,
+        mp.get_property_number("volume-max", max_volume_percentage) or
+          max_volume_percentage),
       chapter_index = chapter_index,
       chapters = chapters,
       subtitle_items = subtitle_items,

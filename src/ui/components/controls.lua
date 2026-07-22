@@ -20,7 +20,8 @@ function controls.new(services)
   local set_settings_dialog_open = navigation.set_settings_open
   local toggle_subtitles, cycle_subtitle = navigation.toggle_subtitles, navigation.cycle_subtitle
   local tooltip_delay, tooltip_slide_distance = config.tooltip_delay, config.tooltip_slide_distance
-  local configured_volume_max, default_text_font = config.volume_max, ui.default_text_font
+  local max_volume_percentage = config.max_volume_percentage
+  local default_text_font = ui.default_text_font
   local Modifier, Rect = ui.Modifier, ui.Rect
   local apply_modifier_size, measure_node = ui.apply_modifier_size, ui.measure_node
   local draw_node, IconButton, TextItem = ui.draw_node, ui.IconButton, ui.TextItem
@@ -29,7 +30,7 @@ function controls.new(services)
   local function VolumeSlider()
     local node = {
       volume = 0,
-      max_volume = configured_volume_max,
+      max_volume_percentage = max_volume_percentage,
       progress = 0,
       track_y1 = 0,
       track_y2 = 0,
@@ -40,7 +41,7 @@ function controls.new(services)
       local track_length = node.track_y2 - node.track_y1
       if track_length <= 0 then return end
       local value = clamp((node.track_y2 - pointer.y) / track_length, 0, 1)
-      mp.set_property_number("volume", value * node.max_volume)
+      mp.set_property_number("volume", value * node.max_volume_percentage)
     end
 
     node.modifier:pointerArea({
@@ -64,8 +65,10 @@ function controls.new(services)
     })
 
     function node:update(snapshot, progress)
-      self.volume = clamp(snapshot.volume or 0, 0, snapshot.volume_max or configured_volume_max)
-      self.max_volume = math.max(100, snapshot.volume_max or configured_volume_max)
+      self.volume = clamp(snapshot.volume or 0, 0,
+        snapshot.max_volume_percentage or max_volume_percentage)
+      self.max_volume_percentage = math.max(100,
+        snapshot.max_volume_percentage or max_volume_percentage)
       self.progress = progress
       self.modifier.pointer_enabled = progress > 0.2
     end
@@ -85,8 +88,10 @@ function controls.new(services)
       local inactive_alpha = ass_alpha_for_opacity(fade_progress * 0.4)
       local active_alpha = ass_alpha_for_opacity(fade_progress)
       local track_w = dp(4)
-      local handle_y = self.track_y2 - track_length * self.volume / self.max_volume
-      local normal_limit_y = self.track_y2 - track_length * 100 / self.max_volume
+      local handle_y = self.track_y2 -
+        track_length * self.volume / self.max_volume_percentage
+      local normal_limit_y = self.track_y2 -
+        track_length * 100 / self.max_volume_percentage
       local boosted = self.volume > 100
       local active_color = boosted and "#FF9800" or "#FFFFFF"
       local handle_w = dp(24)
@@ -231,7 +236,8 @@ function controls.new(services)
     local node = {modifier = Modifier():fillMaxWidth():fillMaxHeight()}
     node.modifier:pointerArea({
       name = "video-surface",
-      on_click = function() mp.commandv("cycle", "pause") end,
+      on_click = config.opts.single_click_actions_enabled and
+        function() mp.commandv("cycle", "pause") end or nil,
       on_double = function() mp.commandv("cycle", "fullscreen") end
     })
     function node:measure(parent)
