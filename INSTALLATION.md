@@ -26,7 +26,7 @@ The resulting layout should look like this:
     └── thumbfast.conf
 ```
 
-For smoother rendering, add this to `mpv.conf`:
+For smoother experience, add this to `mpv.conf`:
 
 ```conf
 video-sync=display-resample

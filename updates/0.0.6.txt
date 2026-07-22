@@ -1,0 +1,7 @@
+- Reduced idle CPU and GPU usage by stopping continuous OSC rendering when no animation or visible playback element needs updates, including while playback is paused.
+- Added configurable single-click play/pause and edge seeking with `single_click_actions_enabled`, `seeking_zone_percentage`, and `seek_step_seconds`.
+- Improved controller auto-hide behavior so the cursor and thumbnail preview disappear after the fade completes, including when the pointer remains over the controls.
+- Added an optional 1dp playback-progress line with `show_mini_seekbar=yes`; hidden progress updates are throttled to keep rendering lightweight.
+- Configuration file changes now update active mpv instances through platform file notifications, and opening Configurations removes unused options while preserving comments and current values.
+- Renamed `always_visible` to `show_on_mouse_move` and `volume_max` to `max_volume_percentage` for clearer configuration behavior.
+- Added minimize, maximize/restore, and close controls for borderless and fullscreen windows, with `force_window_controls=yes` available for decorated windows. The top 64dp supports window dragging and is excluded from fast-seek actions.

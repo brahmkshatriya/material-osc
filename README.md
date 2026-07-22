@@ -3,8 +3,9 @@
 A quality-of-life upgrade for mpv that keeps the player lightweight while
 making everyday controls easier to reach and nicer to use. material-osc brings
 a polished Material-style interface, smooth animated feedback, automatic
-directory playlists, precise thumbnail previews, quick audio and subtitle
-selection, and convenient playback-speed controls—all without replacing mpv.
+directory playlists and much more.
+
+I would say, you should fuck around and find out!
 
 ## Showcase
 
@@ -13,67 +14,31 @@ https://github.com/user-attachments/assets/65046da7-7d9e-4492-9e93-47650b8fc484
 ## Configuration
 
 material-osc can be customized with a `material-osc.conf` file in mpv's
-`script-opts` directory. On Linux, create it with:
+`script-opts` directory. You can also open file from **Right-click → Configurations**.
 
-```bash
-mkdir -p ~/.config/mpv/script-opts
-$EDITOR ~/.config/mpv/script-opts/material-osc.conf
-```
+### Option reference
 
-For example, the following configuration uses a fixed 1x UI scale and a
-pastel-red accent color:
+| Option | Default | Accepted values | Description |
+| --- | --- | --- | --- |
+| `dpi_scale` | `auto` | `auto` or `0.5`–`4` | Uses the display scale automatically or applies a fixed UI scale. |
+| `accent_color` | `"#00bbff"` | Quoted six-digit RGB color | Sets the seekbar, selections, toggles, and other highlighted elements. |
+| `context_menu` | `yes` | `yes`, `no` | Enables the material-osc right-click context menu. |
+| `tooltip` | `yes` | `yes`, `no` | Enables tooltips for controls. |
+| `mouse_timeout` | `2` | Seconds; `0` disables timeout | Controls how long the UI remains visible after pointer activity. |
+| `show_on_mouse_move` | `no` | `yes`, `no` | With `yes`, movement anywhere reveals the UI. With `no`, use the bottom edge for playback controls or the top edge for window controls. |
+| `single_click_actions_enabled` | `yes` | `yes`, `no` | Enables single-click play/pause and left/right edge seeking. Double-click fullscreen remains available when disabled. |
+| `seeking_zone_percentage` | `15` | `0`–`50` | Sets each fast-seek zone's width as a percentage of the window. |
+| `seek_step_seconds` | `5` | Seconds; minimum `1` | Sets how far edge clicks and edge scrolling seek backward or forward. |
+| `show_mini_seekbar` | `no` | `yes`, `no` | Keeps a 1dp playback-progress line at the bottom while the main controls are hidden. |
+| `force_window_controls` | `no` | `yes`, `no` | Shows material-osc window controls even when mpv has native window decorations. |
+| `max_volume_percentage` | `150` | Percentage; minimum `100` | Sets mpv's upper volume limit and the OSC volume range. |
+| `directory_playlist` | `yes` | `yes`, `no` | Adds nearby video and audio files when opening a local file, unless a multi-item playlist already exists. |
+| `directory_playlist_sort` | `name` | `name`, `newest`, `oldest` | Selects how automatically discovered directory entries are ordered. |
 
-```conf
-dpi_scale=1
-accent_color=#FF6961
-```
+### Window controls
 
-`dpi_scale` controls the size of the interface. Its default value, `auto`, uses
-the display's reported scale; a number from `0.5` to `4` sets it explicitly.
-`accent_color` controls highlighted UI elements and accepts a six-digit RGB hex
-color. Set `context_menu=no` to disable the right-click context menu. Restart
-mpv after changing the file. `mouse_timeout` controls how many seconds the
-controls remain visible after pointer activity. `seek_step_seconds` controls
-how many seconds the left and right edge actions seek backward or forward.
-`seeking_zone_percentage` controls the width of each edge seeking zone as a
-percentage of the window and defaults to `15`. Set
-`single_click_actions_enabled=no` to disable single-click play/pause and edge
-seeking while keeping double-click fullscreen. Set `show_mini_seekbar=yes` to
-keep a 1dp playback-progress line at the bottom while the controller is hidden.
-With `show_on_mouse_move=no`
-(the default), the control bar is revealed only when the pointer reaches the
-bottom. Set it to `yes` to reveal the bar after pointer movement anywhere; it
-still hides after `mouse_timeout` without pointer movement, even when the
-pointer rests over the control bar. The mouse cursor remains visible during the
-fade and hides when it completes. `max_volume_percentage` sets the upper volume
-limit and defaults to `150`.
-
-On other platforms, place the same file at
-`<mpv config directory>/script-opts/material-osc.conf`.
-Changes to this file are applied to running mpv instances through the platform's
-file-change notifications; restarting mpv is not required.
-
-When mpv runs without native window decorations (`border=no`) or enters
-fullscreen, material-osc automatically provides minimize, maximize/restore, and
-close buttons. They use the same reveal and timeout behavior as the bottom
-control bar. The top 64dp can be dragged to move the window and is excluded from
-the left and right fast-seek zones.
-Set `force_window_controls=yes` to provide these controls even when mpv has
-native window decorations.
-
-## Directory playlists
-
-Opening a local media file automatically adds the other video and audio files
-in the same directory to the playlist, ordered by filename. An existing
-multi-item playlist is left unchanged. To disable this behavior or sort by
-modification time instead, use `script-opts/material-osc.conf`:
-
-```conf
-directory_playlist=no
-directory_playlist_sort=newest
-```
-
-`directory_playlist_sort` accepts `name` (the default), `newest`, or `oldest`.
+When mpv runs without native window decorations (`border=no` in `mpv.conf`) or enters
+fullscreen, material-osc automatically provides minimize, maximize/restore, and close buttons.
 
 ## Recommended mpv configuration
 
