@@ -78,7 +78,7 @@ function application_state.new(args)
       width = 0, height = 0, disabled = true, available = false,
       visible = false
     },
-    timers = {hide = nil, frame = nil, frame_interval = 1 / 60},
+    timers = {hide = nil, frame = nil, progress = nil, frame_interval = 1 / 60},
     loading = {started_ms = args.now_ms(), quality_switching = false},
     media = {loading = true},
     effects = {order = {}, by_key = {}},

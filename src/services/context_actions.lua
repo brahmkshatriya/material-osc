@@ -176,6 +176,7 @@ function context_actions.new(args)
       "single_click_actions_enabled",
       "seeking_zone_percentage",
       "seek_step_seconds",
+      "show_mini_seekbar",
       "max_volume_percentage",
       "directory_playlist",
       "directory_playlist_sort"

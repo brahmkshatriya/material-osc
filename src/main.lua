@@ -4,6 +4,7 @@ local opts = {
   show_on_mouse_move = false,
   single_click_actions_enabled = true,
   seeking_zone_percentage = 15,
+  show_mini_seekbar = false,
   directory_playlist = true,
   directory_playlist_sort = "name",
   context_menu = true,
@@ -126,6 +127,20 @@ local function create_app(services)
         "music_note_2", "#FFFFFF", icon_size,
         services.ui.alpha(self.no_video_opacity), true)
     end
+    if opts.show_mini_seekbar then
+      local duration = state.snapshot.duration or 0
+      local opacity = 1 - ui.clamp(state.controller.opacity.value, 0, 1)
+      if duration > 0 and opacity > 0.001 then
+        local height = ui.dp(1)
+        local progress = ui.clamp(
+          (state.snapshot.position or 0) / duration, 0, 1)
+        services.ui.draw_box(ass, root.x, root.y2 - height,
+          root.x2, root.y2, 0, "#282828", services.ui.alpha(opacity * 0.7), true)
+        services.ui.draw_box(ass, root.x, root.y2 - height,
+          root.x + root.w * progress, root.y2, 0, opts.accent_color,
+          services.ui.alpha(opacity), true)
+      end
+    end
     if state.snapshot.buffering then services.loading.draw(ass) end
     services.playback_indicator:draw(ass, root)
     self.edge_seek:draw(ass, root)
@@ -172,6 +187,10 @@ local function create_app(services)
   end
 
   function node:has_visible_overlay()
+    if opts.show_mini_seekbar and (state.snapshot.duration or 0) > 0 and
+      state.controller.opacity.value < 0.999 then
+      return true
+    end
     if state.snapshot.buffering or self.no_video_opacity > 0 or
       state.controller.opacity.value > 0.001 or
       state.playback_indicator.opacity.value > 0.001 or
@@ -528,6 +547,9 @@ runtime_host = mpv_runtime_module.new({
       app:needs_continuous_render() or
       runtime.snapshot.buffering or
       runtime.ytdl.caption_loading_id ~= nil
+  end,
+  hidden_playback_progress_visible = function()
+    return opts.show_mini_seekbar
   end
 })
 local function handle_snapshot(snapshot, now)

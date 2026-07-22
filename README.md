@@ -38,7 +38,9 @@ how many seconds the left and right edge actions seek backward or forward.
 `seeking_zone_percentage` controls the width of each edge seeking zone as a
 percentage of the window and defaults to `15`. Set
 `single_click_actions_enabled=no` to disable single-click play/pause and edge
-seeking while keeping double-click fullscreen. With `show_on_mouse_move=no`
+seeking while keeping double-click fullscreen. Set `show_mini_seekbar=yes` to
+keep a 1dp playback-progress line at the bottom while the controller is hidden.
+With `show_on_mouse_move=no`
 (the default), the control bar is revealed only when the pointer reaches the
 bottom. Set it to `yes` to reveal the bar after pointer movement anywhere; it
 still hides after `mouse_timeout` without pointer movement, even when the

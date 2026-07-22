@@ -61,6 +61,8 @@ function mpv_runtime.new(args)
     state.timers.frame = nil
     if state.timers.hide then state.timers.hide:kill() end
     state.timers.hide = nil
+    if state.timers.progress then state.timers.progress:kill() end
+    state.timers.progress = nil
     if state.wheel.timer then state.wheel.timer:kill() end
     state.wheel.kind, state.wheel.amount, state.wheel.timer = nil, 0, nil
     if self.original_cursor_autohide ~= nil then
@@ -113,11 +115,27 @@ function mpv_runtime.new(args)
       {"gamma", "number"}, {"brightness", "number"},
       {"saturation", "number"}, {"glsl-shaders", "native"}
     }) do mp.observe_property(property[1], property[2], args.render) end
-    local function render_playback_progress()
+    local function render_controller_progress()
       if state.controller.opacity.value > 0.001 then args.render() end
     end
-    mp.observe_property("time-pos", "number", render_playback_progress)
-    mp.observe_property("demuxer-cache-state", "native", render_playback_progress)
+    local function render_playback_position()
+      if state.controller.opacity.value > 0.001 then
+        if state.timers.progress then state.timers.progress:kill() end
+        state.timers.progress = nil
+        args.render()
+        return
+      end
+      if not args.hidden_playback_progress_visible or
+        not args.hidden_playback_progress_visible() or state.timers.progress then
+        return
+      end
+      state.timers.progress = mp.add_timeout(0.1, function()
+        state.timers.progress = nil
+        args.render()
+      end)
+    end
+    mp.observe_property("time-pos", "number", render_playback_position)
+    mp.observe_property("demuxer-cache-state", "native", render_controller_progress)
     mp.observe_property("display-fps", "number", function() self:update_rate() end)
     mp.observe_property("estimated-display-fps", "number", function() self:update_rate() end)
 
