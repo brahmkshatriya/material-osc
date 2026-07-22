@@ -163,12 +163,37 @@ local function create_app(services)
     ui.draw_node(self.media_information_close, ass, root)
   end
 
+  function node:needs_continuous_render()
+    return self.no_video_since ~= nil and self.no_video_opacity < 0.66
+  end
+
+  function node:has_visible_overlay()
+    if state.snapshot.buffering or self.no_video_opacity > 0 or
+      state.controller.opacity.value > 0.001 or
+      state.playback_indicator.opacity.value > 0.001 or
+      state.edge_seek.left.opacity.value > 0.001 or
+      state.edge_seek.right.opacity.value > 0.001 or
+      state.tooltip.opacity.value > 0.001 or state.update.open or
+      self.media_information_close.visible then
+      return true
+    end
+    if state.context_menu.open or state.context_menu.pending_x ~= nil or
+      state.context_menu.animation.value > 0.001 then
+      return true
+    end
+    for _, name in ipairs({"playlist", "chapter", "subtitle", "audio", "settings"}) do
+      if state[name].open or state[name].animation.value > 0.001 then return true end
+    end
+    return false
+  end
+
   return node
 end
 
 local asset_paths = assets.initialize({script_dir = script_dir, utils = utils, msg = msg})
 
 local osd = mp.create_osd_overlay("ass-events")
+local osd_active = false
 local render
 
 local runtime = application_state.new({
@@ -483,7 +508,14 @@ local runtime_host = mpv_runtime_module.new({
   bookmarks = bookmark_service,
   close_context_menu = close_context_menu,
   controller = function() return controller end,
-  render = function() render() end
+  render = function() render() end,
+  needs_continuous_render = function()
+    return animation_coordinator:is_running() or
+      tooltip_service:needs_frames(mp.get_time()) or
+      app:needs_continuous_render() or
+      runtime.snapshot.buffering or
+      runtime.ytdl.caption_loading_id ~= nil
+  end
 })
 local function handle_snapshot(snapshot, now)
   playback_indicator:observe(snapshot, now)
@@ -510,10 +542,22 @@ local renderer = frame_runtime.renderer.new({
     return Rect({x = 0, y = 0, w = viewport.w, h = viewport.h})
   end,
   disable_dialog = function(binding) mp.disable_key_bindings(binding) end,
-  present = function(ass) osd.data = ass.text; osd:update() end,
+  present = function(ass)
+    if app:has_visible_overlay() then
+      osd.data = ass.text
+      osd:update()
+      osd_active = true
+    elseif osd_active then
+      osd:remove()
+      osd_active = false
+    end
+  end,
   update_mouse_area = function() runtime_host:update_mouse_area() end
 })
-render = function() renderer:render() end
+render = function()
+  renderer:render()
+  runtime_host:update_frame_timer()
+end
 
 local function recreate_app() app = create_app(services) end
 controller = controller_module.new({

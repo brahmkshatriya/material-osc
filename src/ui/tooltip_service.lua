@@ -43,6 +43,12 @@ function tooltip_service.new(args)
     state.slide:update(now)
   end
 
+  function service:needs_frames(now)
+    if state.opacity:is_running() or state.slide:is_running() then return true end
+    return state.requested and state.hover_key and
+      now - state.hover_start < delay
+  end
+
   function service:finalize(now, suppressed)
     local ready = not suppressed and state.requested and state.hover_key and
       now - state.hover_start >= delay

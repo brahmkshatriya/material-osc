@@ -35,6 +35,17 @@ function mpv_runtime.new(args)
     end
   end
 
+  function service:update_frame_timer()
+    local needs_frames = args.needs_continuous_render and
+      args.needs_continuous_render() or false
+    if needs_frames and not state.timers.frame then
+      state.timers.frame = mp.add_periodic_timer(state.timers.frame_interval, args.render)
+    elseif not needs_frames and state.timers.frame then
+      state.timers.frame:kill()
+      state.timers.frame = nil
+    end
+  end
+
   function service:dispose()
     if state.timers.frame then state.timers.frame:kill() end
     state.timers.frame = nil
@@ -70,13 +81,13 @@ function mpv_runtime.new(args)
       function(...) controller():on_hidpi_scale(...) end)
     for _, property in ipairs({
       {"pause", "bool"}, {"mute", "bool"}, {"volume", "number"},
-      {"duration", "number"}, {"time-pos", "number"}, {"chapter", "number"},
+      {"duration", "number"}, {"chapter", "number"},
       {"chapter-list", "native"}, {"track-list", "native"}, {"sid", "number"},
       {"secondary-sid", "number"}, {"secondary-sub-visibility", "bool"},
       {"aid", "number"}, {"speed", "number"}, {"sub-visibility", "bool"},
       {"fullscreen", "bool"}, {"seeking", "bool"},
       {"paused-for-cache", "bool"}, {"cache-buffering-state", "number"},
-      {"demuxer-cache-state", "native"}, {"vid", "number"},
+      {"vid", "number"},
       {"video-out-params", "native"}, {"demuxer-via-network", "bool"},
       {"playlist", "native"}, {"playlist-pos", "number"},
       {"loop-playlist", "string"}, {"loop-file", "string"},
@@ -87,6 +98,11 @@ function mpv_runtime.new(args)
       {"gamma", "number"}, {"brightness", "number"},
       {"saturation", "number"}, {"glsl-shaders", "native"}
     }) do mp.observe_property(property[1], property[2], args.render) end
+    local function render_playback_progress()
+      if state.controller.opacity.value > 0.001 then args.render() end
+    end
+    mp.observe_property("time-pos", "number", render_playback_progress)
+    mp.observe_property("demuxer-cache-state", "native", render_playback_progress)
     mp.observe_property("display-fps", "number", function() self:update_rate() end)
     mp.observe_property("estimated-display-fps", "number", function() self:update_rate() end)
 
@@ -153,9 +169,6 @@ function mpv_runtime.new(args)
     mp.register_event("file-loaded", function() self:on_file_loaded() end)
 
     self:update_rate()
-    if not state.timers.frame then
-      state.timers.frame = mp.add_periodic_timer(state.timers.frame_interval, args.render)
-    end
     args.render()
   end
 

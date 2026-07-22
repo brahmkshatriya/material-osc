@@ -3,6 +3,41 @@ local animation_coordinator = {}
 function animation_coordinator.new(args)
   local runtime = args.runtime
   local service = {}
+  local animations = {
+    runtime.controller.opacity,
+    runtime.volume.animation,
+    runtime.context_menu.animation,
+    runtime.context_menu.width_animation,
+    runtime.context_menu.height_animation,
+    runtime.chapter.animation,
+    runtime.chapter.fade,
+    runtime.playlist.animation,
+    runtime.playlist.width_animation,
+    runtime.playlist.height_animation,
+    runtime.subtitle.animation,
+    runtime.audio.animation,
+    runtime.settings.animation,
+    runtime.settings.content_animation,
+    runtime.settings.width_animation,
+    runtime.settings.height_animation,
+    runtime.playback_indicator.opacity,
+    runtime.playback_indicator.scale,
+    runtime.edge_seek.left.opacity,
+    runtime.edge_seek.left.slide,
+    runtime.edge_seek.left.feedback,
+    runtime.edge_seek.right.opacity,
+    runtime.edge_seek.right.slide,
+    runtime.edge_seek.right.feedback,
+    runtime.tooltip.opacity,
+    runtime.tooltip.slide
+  }
+
+  function service:is_running()
+    for _, value in ipairs(animations) do
+      if value:is_running() then return true end
+    end
+    return false
+  end
 
   function service:update(now)
     runtime.controller.opacity:update(now)
