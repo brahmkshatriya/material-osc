@@ -24,6 +24,7 @@ function controls.new(services)
   local default_text_font = ui.default_text_font
   local Modifier, Rect = ui.Modifier, ui.Rect
   local apply_modifier_size, measure_node = ui.apply_modifier_size, ui.measure_node
+  local content_bounds = ui.content_bounds
   local draw_node, IconButton, TextItem = ui.draw_node, ui.IconButton, ui.TextItem
   local Visibility, Row, Pill = ui.Visibility, ui.Row, ui.Pill
 
@@ -367,6 +368,74 @@ function controls.new(services)
     return node
   end
 
+  local function WindowControls()
+    local node = {
+      modifier = Modifier():padding({all = dp(12)}):align({
+        horizontal = "ending", vertical = "top"
+      })
+    }
+    node.minimize = IconButton({
+      name = "window-minimize-button", icon = "minimize", size = 22,
+      tooltip = "Minimize",
+      on_click = function() mp.set_property_bool("window-minimized", true) end
+    })
+    node.maximize = IconButton({
+      name = "window-maximize-button", icon = "crop_square", size = 22,
+      icon_size = 18,
+      tooltip = "Maximize",
+      on_click = function()
+        if node.fullscreen then mp.set_property_bool("fullscreen", false)
+        else mp.commandv("cycle", "window-maximized") end
+      end
+    })
+    node.close = IconButton({
+      name = "window-close-button", icon = "close", size = 22,
+      tooltip = "Close",
+      on_click = function() mp.commandv("quit") end
+    })
+    node.close.modifier.hover_color = "#E81123"
+    node.close.modifier.hover_alpha = "40"
+    node.pill = Pill({
+      children = {node.minimize, node.maximize, node.close}
+    })
+
+    function node:update(snapshot)
+      self.fullscreen = snapshot.fullscreen
+      local restored = snapshot.fullscreen or snapshot.window_maximized
+      self.maximize:update({
+        icon = restored and "filter_none" or "crop_square",
+        tooltip = snapshot.fullscreen and "Exit fullscreen" or
+          (snapshot.window_maximized and "Restore" or "Maximize")
+      })
+    end
+
+    function node:measure(parent)
+      return apply_modifier_size(self.modifier, measure_node(self.pill, parent), parent)
+    end
+
+    function node:draw(ass, bounds)
+      draw_node(self.pill, ass, content_bounds(bounds, self.modifier))
+    end
+
+    return node
+  end
+
+  local function WindowDragArea()
+    local node = {
+      modifier = Modifier():fillMaxWidth():height(
+        ui.edge_seek_top_inset()):pointerArea({
+          name = "window-drag-area"
+        })
+    }
+
+    function node:measure(parent)
+      return apply_modifier_size(self.modifier, {w = 0, h = 0}, parent)
+    end
+
+    function node:draw() end
+    return node
+  end
+
   local function TooltipHost()
     local node = {
       suppressed = false,
@@ -402,6 +471,8 @@ function controls.new(services)
     SeekBar = SeekBar,
     VideoSurface = VideoSurface,
     ControlsRow = ControlsRow,
+    WindowDragArea = WindowDragArea,
+    WindowControls = WindowControls,
     TooltipHost = TooltipHost
   }
 end

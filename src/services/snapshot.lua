@@ -212,6 +212,8 @@ function snapshot.reader(deps)
       paused = mp.get_property_native("pause") == true,
       muted = mp.get_property_native("mute") == true,
       fullscreen = mp.get_property_native("fullscreen") == true,
+      window_border = mp.get_property_native("border") ~= false,
+      window_maximized = mp.get_property_native("window-maximized") == true,
       volume = mp.get_property_number("volume", 0) or 0,
       speed = mp.get_property_number("speed", 1) or 1,
       sub_visibility = mp.get_property_native("sub-visibility") ~= false,

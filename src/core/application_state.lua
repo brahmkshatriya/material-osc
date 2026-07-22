@@ -15,6 +15,7 @@ function application_state.new(args)
       hide_cursor_after_fade = false,
       bounds = nil
     },
+    window_controls = {bounds = nil, reveal_bounds = nil},
     pointer = {x = -1, y = -1, active = nil},
     context_menu = {
       open = false, x = 0, y = 0,

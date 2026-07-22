@@ -272,6 +272,7 @@ function compose.new(deps)
       transition_progress = args.transition_progress or 0,
       tooltip = args.tooltip,
       size = args.size or icon_text_size,
+      icon_size = args.icon_size or args.size or icon_text_size,
       alpha = args.alpha,
       enabled = args.enabled ~= false,
       on_click = args.on_click,
@@ -330,12 +331,13 @@ function compose.new(deps)
           return string.format("%02X",
             math.floor(255 - 255 * opacity * fraction + 0.5))
         end
-        draw_icon(ass, center_x, center_y, self.icon, "#FFFFFF", self.size,
+        draw_icon(ass, center_x, center_y, self.icon, "#FFFFFF", self.icon_size,
           faded_alpha(1 - progress))
-        draw_icon(ass, center_x, center_y, self.transition_icon, "#FFFFFF", self.size,
+        draw_icon(ass, center_x, center_y, self.transition_icon, "#FFFFFF",
+          self.icon_size,
           faded_alpha(progress))
       else
-        draw_icon(ass, center_x, center_y, self.icon, "#FFFFFF", self.size,
+        draw_icon(ass, center_x, center_y, self.icon, "#FFFFFF", self.icon_size,
           icon_alpha)
       end
       if self.tooltip and self.enabled and mouse_in(bounds) then

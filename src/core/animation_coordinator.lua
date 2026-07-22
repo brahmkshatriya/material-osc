@@ -85,12 +85,14 @@ function animation_coordinator.new(args)
 
     local pointer = runtime.pointer
     local controller_bounds = runtime.controller.bounds
-    local over_controller = controller_bounds and args.mouse_in(controller_bounds)
+    local window_controls_bounds = runtime.window_controls.bounds
+    local over_controller = (controller_bounds and args.mouse_in(controller_bounds)) or
+      (window_controls_bounds and args.mouse_in(window_controls_bounds))
     local edge_modal = modal or runtime.subtitle.open or runtime.audio.open or
       runtime.subtitle.animation:is_running() or runtime.audio.animation:is_running()
     local edge_allowed = args.single_click_actions_enabled() and
       not edge_modal and not over_controller and
-      pointer.x >= 0 and pointer.y >= 0
+      pointer.x >= 0 and pointer.y >= args.edge_seek_top_inset()
     local edge_width = runtime.viewport.w * args.seeking_zone_fraction()
     local wants_left = edge_allowed and pointer.x <= edge_width
     local wants_right = edge_allowed and pointer.x >= runtime.viewport.w - edge_width

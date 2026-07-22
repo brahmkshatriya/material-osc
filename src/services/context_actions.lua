@@ -177,6 +177,7 @@ function context_actions.new(args)
       "seeking_zone_percentage",
       "seek_step_seconds",
       "show_mini_seekbar",
+      "force_window_controls",
       "max_volume_percentage",
       "directory_playlist",
       "directory_playlist_sort"

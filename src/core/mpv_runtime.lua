@@ -102,7 +102,8 @@ function mpv_runtime.new(args)
       {"chapter-list", "native"}, {"track-list", "native"}, {"sid", "number"},
       {"secondary-sid", "number"}, {"secondary-sub-visibility", "bool"},
       {"aid", "number"}, {"speed", "number"}, {"sub-visibility", "bool"},
-      {"fullscreen", "bool"}, {"seeking", "bool"},
+      {"fullscreen", "bool"}, {"border", "bool"},
+      {"window-maximized", "bool"}, {"seeking", "bool"},
       {"paused-for-cache", "bool"}, {"cache-buffering-state", "number"},
       {"vid", "number"},
       {"video-out-params", "native"}, {"demuxer-via-network", "bool"},
@@ -152,7 +153,8 @@ function mpv_runtime.new(args)
       {"wheel_up", function() controller():on_wheel(-1) end},
       {"wheel_down", function() controller():on_wheel(1) end}
     }, "material-osc-input", "force")
-    mp.enable_key_bindings("material-osc-input", "allow-hide-cursor")
+    mp.enable_key_bindings("material-osc-input",
+      "allow-hide-cursor+allow-vo-dragging")
     mp.set_key_bindings({{"ESC", args.close_context_menu}},
       "material-osc-context-menu", "force")
     mp.disable_key_bindings("material-osc-context-menu")

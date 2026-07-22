@@ -5,6 +5,7 @@ local opts = {
   single_click_actions_enabled = true,
   seeking_zone_percentage = 15,
   show_mini_seekbar = false,
+  force_window_controls = false,
   directory_playlist = true,
   directory_playlist_sort = "name",
   context_menu = true,
@@ -100,6 +101,8 @@ local function create_app(services)
   node.playlist_controls = playlist_module.new(services)
   node.seekbar = controls.SeekBar()
   node.controls = controls.ControlsRow()
+  node.window_drag_area = controls.WindowDragArea()
+  node.window_controls = controls.WindowControls()
   node.controller = ui.Column({
     modifier = ui.Modifier():fillMaxWidth():padding({all = ui.dp(12)}):align({
       horizontal = "starting", vertical = "bottom"
@@ -124,6 +127,7 @@ local function create_app(services)
       self.no_video_opacity = ui.clamp((elapsed - 0.12) / 0.28, 0, 1) * 0.66
     end
     self.controls:update(snapshot)
+    self.window_controls:update(snapshot)
     self.playlist_controls:update(snapshot)
     local context_visible = state.context_menu.open or
       state.context_menu.pending_x ~= nil or
@@ -195,6 +199,28 @@ local function create_app(services)
       })
       state.volume.popup_bounds, state.volume.button_bounds = nil, nil
     end
+    local show_window_controls = opts.force_window_controls or
+      not state.snapshot.window_border or state.snapshot.fullscreen
+    if show_window_controls then
+      local controls_size = ui.measure_node(self.window_controls, root)
+      ui.draw_node(self.window_drag_area, ass, root)
+      state.window_controls.reveal_bounds = ui.Rect({
+        x = root.x, y = root.y, w = root.w, h = controls_size.h
+      })
+      if state.controller.opacity.value > 0 then
+        state.window_controls.bounds =
+          ui.draw_node(self.window_controls, ass, root)
+      else
+        state.window_controls.bounds = ui.Rect({
+          x = root.x2 - controls_size.w,
+          y = root.y,
+          w = controls_size.w,
+          h = controls_size.h
+        })
+      end
+    else
+      state.window_controls.bounds, state.window_controls.reveal_bounds = nil, nil
+    end
     state.pointer.x, state.pointer.y = pointer_x, pointer_y
 
     ui.draw_node(self.tooltip, ass, root)
@@ -262,6 +288,7 @@ local clamp = function(value, minimum, maximum)
   return ui_renderer:clamp(value, minimum, maximum)
 end
 local dp = function(value) return ui_renderer:dp(value) end
+local edge_seek_top_inset = function() return dp(64) end
 mp.set_property("geometry", "x66%")
 
 local text_metrics = text_metrics_module.new({
@@ -463,6 +490,7 @@ local compose = compose_module.new({
 })
 local Rect, Modifier = compose.Rect, compose.Modifier
 local apply_modifier_size, measure_node = compose.apply_modifier_size, compose.measure_node
+local content_bounds = compose.content_bounds
 local draw_node = compose.draw_node
 local IconButton, TextItem = compose.IconButton, compose.TextItem
 local Visibility, Row, Column, Pill = compose.Visibility, compose.Row, compose.Column, compose.Pill
@@ -490,6 +518,7 @@ local services = {
   ui = {
     dp = dp, clamp = clamp, smooth_step = smooth_step, lerp = lerp,
     dpi_scale = function() return ui_renderer:dpi_scale() end,
+    edge_seek_top_inset = edge_seek_top_inset,
     alpha = ass_alpha_for_opacity, draw_rect = draw_rect, draw_box = draw_box,
     draw_round_box = draw_round_box,
     draw_icon = draw_icon, draw_text = draw_text, draw_seekbar = draw_seekbar,
@@ -500,6 +529,7 @@ local services = {
     text_width = text_intrinsic_width,
     default_text_font = default_text_font, Modifier = Modifier, Rect = Rect,
     apply_modifier_size = apply_modifier_size, measure_node = measure_node,
+    content_bounds = content_bounds,
     draw_node = draw_node, IconButton = IconButton, TextItem = TextItem,
     Visibility = Visibility, Row = Row, Column = Column, Pill = Pill
   },
@@ -550,6 +580,7 @@ local animation_coordinator = animation_coordinator_module.new({
   seeking_zone_fraction = function()
     return opts.seeking_zone_percentage / 100
   end,
+  edge_seek_top_inset = edge_seek_top_inset,
   hide_cursor = function() runtime_host:set_cursor_autohide("always") end
 })
 local function update_animation_targets(now)
@@ -622,6 +653,7 @@ local function recreate_app() app = create_app(services) end
 controller = controller_module.new({
   runtime = runtime, mp = mp, opts = opts, navigation = navigation,
   thumbnail = thumbnail_service, mouse_in = mouse_in,
+  edge_seek_top_inset = edge_seek_top_inset,
   hitbox_at_cursor = hitbox_at_cursor,
   open_context_menu = open_context_menu,
   set_cursor_autohide = function(value)

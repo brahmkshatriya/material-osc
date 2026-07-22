@@ -60,6 +60,8 @@ function controller.new(args)
   function service:should_show_at_pointer()
     if self:interaction_requires_visibility() then return true end
     return (runtime.controller.bounds and args.mouse_in(runtime.controller.bounds)) or
+      (runtime.window_controls.reveal_bounds and
+        args.mouse_in(runtime.window_controls.reveal_bounds)) or
       (runtime.volume.popup_bounds and args.mouse_in(runtime.volume.popup_bounds)) or false
   end
 
@@ -147,6 +149,18 @@ function controller.new(args)
   end
 
   function service:on_primary_button(event)
+    if event and event.event == "down" then
+      self:update_mouse()
+      local name = args.hitbox_at_cursor()
+      if name == "window-drag-area" then
+        runtime.pointer.window_dragging = true
+        mp.commandv("begin-vo-dragging")
+        return
+      end
+    elseif event and event.event == "up" and runtime.pointer.window_dragging then
+      runtime.pointer.window_dragging = nil
+      return
+    end
     if not event or event.event == "down" or event.event == "press" then
       self:on_primary_down()
     elseif event.event == "up" then
@@ -222,8 +236,9 @@ function controller.new(args)
     local width = math.max(1, runtime.viewport.w)
     local horizontal_position = runtime.pointer.x / width
     local seeking_zone = opts.seeking_zone_percentage / 100
-    if horizontal_position < seeking_zone or
-      horizontal_position > 1 - seeking_zone then
+    local below_top_inset = runtime.pointer.y >= args.edge_seek_top_inset()
+    if below_top_inset and (horizontal_position < seeking_zone or
+      horizontal_position > 1 - seeking_zone) then
       local step = math.max(1, tonumber(opts.seek_step_seconds) or 5)
       local amount = direction < 0 and step or -step
       self:queue_wheel("seek", amount)

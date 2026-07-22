@@ -72,9 +72,14 @@ function edge_seek.new(services)
     local zone_w = root.w * zone_fraction
     local zone_h = state.controller.bounds and
       math.max(0, state.controller.bounds.y1 - root.y) or root.h
-    local left = ui.Rect({x = root.x, y = root.y, w = zone_w, h = zone_h})
+    local top_inset = ui.edge_seek_top_inset()
+    local active_height = math.max(0, zone_h - top_inset)
+    local left = ui.Rect({
+      x = root.x, y = root.y + top_inset, w = zone_w, h = active_height
+    })
     local right = ui.Rect({
-      x = root.x2 - zone_w, y = root.y, w = zone_w, h = zone_h
+      x = root.x2 - zone_w, y = root.y + top_inset,
+      w = zone_w, h = active_height
     })
     state.edge_seek.left.bounds, state.edge_seek.right.bounds = left, right
     register_hitbox("left", left, -step)

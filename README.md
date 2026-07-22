@@ -53,6 +53,14 @@ On other platforms, place the same file at
 Changes to this file are applied to running mpv instances through the platform's
 file-change notifications; restarting mpv is not required.
 
+When mpv runs without native window decorations (`border=no`) or enters
+fullscreen, material-osc automatically provides minimize, maximize/restore, and
+close buttons. They use the same reveal and timeout behavior as the bottom
+control bar. The top 64dp can be dragged to move the window and is excluded from
+the left and right fast-seek zones.
+Set `force_window_controls=yes` to provide these controls even when mpv has
+native window decorations.
+
 ## Directory playlists
 
 Opening a local media file automatically adds the other video and audio files
