@@ -200,7 +200,7 @@ function context_actions.new(args)
         lines[#lines + 1] = ""
       else
         lines[#lines + 1] = "# material-osc configuration"
-        lines[#lines + 1] = "# Restart mpv after changing these values."
+        lines[#lines + 1] = "# Changes are applied to running mpv instances."
         lines[#lines + 1] = ""
       end
       for _, name in ipairs(missing) do

@@ -50,6 +50,8 @@ limit and defaults to `150`.
 
 On other platforms, place the same file at
 `<mpv config directory>/script-opts/material-osc.conf`.
+Changes to this file are applied to running mpv instances through the platform's
+file-change notifications; restarting mpv is not required.
 
 ## Directory playlists
 

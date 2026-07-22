@@ -14,9 +14,32 @@ local opts = {
   accent_color = "#00bbff",
   max_volume_percentage = 150
 }
-options.read_options(opts, "material-osc")
-opts.seeking_zone_percentage = math.max(0,
-  math.min(50, tonumber(opts.seeking_zone_percentage) or 15))
+local option_defaults = {}
+for name, value in pairs(opts) do option_defaults[name] = value end
+local options_update_handler
+local config_watcher
+local function normalize_option_values(values)
+  for name, default in pairs(option_defaults) do
+    local value = values[name]
+    if type(default) == "string" and type(value) == "string" then
+      local quote = value:sub(1, 1)
+      if (quote == '"' or quote == "'") and value:sub(-1) == quote then
+        values[name] = value:sub(2, -2)
+      end
+    end
+  end
+  values.seeking_zone_percentage = math.max(0,
+    math.min(50, tonumber(values.seeking_zone_percentage) or 15))
+  values.max_volume_percentage = math.max(100,
+    tonumber(values.max_volume_percentage) or 150)
+  return values
+end
+options.read_options(opts, "material-osc", function(changed)
+  normalize_option_values(opts)
+  if config_watcher then config_watcher:preserve(changed) end
+  if options_update_handler then options_update_handler(changed) end
+end)
+normalize_option_values(opts)
 
 local assdraw = require "mp.assdraw"
 local msg = require "mp.msg"
@@ -35,6 +58,7 @@ local frame_runtime = require "src.core.frame_runtime"
 local controller_module = require "src.core.controller"
 local navigation_module = require "src.core.navigation"
 local mpv_runtime_module = require "src.core.mpv_runtime"
+local config_watcher_module = require "src.services.config_watcher"
 
 local compose_module = require "src.ui.compose"
 local context_menu_module = require "src.ui.components.context_menu"
@@ -606,6 +630,51 @@ controller = controller_module.new({
   render = function() render() end, recreate_app = recreate_app
 })
 
+options_update_handler = function(changed)
+  if changed.max_volume_percentage then
+    max_volume_percentage = opts.max_volume_percentage
+    services.config.max_volume_percentage = max_volume_percentage
+    mp.set_property_number("volume-max", max_volume_percentage)
+  end
+  if changed.context_menu and not opts.context_menu then
+    close_context_menu()
+  end
+  if changed.dpi_scale or changed.single_click_actions_enabled or
+    changed.seeking_zone_percentage or changed.seek_step_seconds or
+    changed.max_volume_percentage then
+    recreate_app()
+  end
+  if changed.show_on_mouse_move then
+    if opts.show_on_mouse_move then controller:show()
+    else controller:sync_visibility_with_pointer() end
+  elseif changed.mouse_timeout and runtime.controller.visible then
+    controller:show()
+  end
+  render()
+end
+
+local config_path = mp.find_config_file("script-opts/material-osc.conf") or
+  mp.command_native({"expand-path", "~~/script-opts/material-osc.conf"})
+config_watcher = config_watcher_module.new({
+  mp = mp,
+  utils = utils,
+  path = config_path,
+  directory = select(1, utils.split_path(config_path)),
+  options = opts,
+  defaults = option_defaults,
+  normalize = normalize_option_values,
+  on_update = function(changed)
+    normalize_option_values(opts)
+    options_update_handler(changed)
+  end,
+  on_error = function(error)
+    msg.warn("live material-osc configuration reload is unavailable: " ..
+      tostring(error or ""))
+  end
+})
+mp.register_event("shutdown", function() config_watcher:stop() end)
+
 runtime_host:start()
 if opts.show_on_mouse_move then controller:show() end
+config_watcher:start()
 updater:start()
