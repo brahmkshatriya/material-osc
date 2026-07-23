@@ -13,6 +13,10 @@ function controller.new(args)
     if runtime.controller.input_suppressed then
       visible = false
     end
+    if not visible and not runtime.controller.visible and
+      runtime.controller.opacity.target == 0 then
+      return false
+    end
     local was_visible = runtime.controller.visible or
       runtime.controller.opacity.value > 0.001 or
       runtime.controller.opacity:is_running()
@@ -26,6 +30,7 @@ function controller.new(args)
     runtime.controller.opacity:set_target(visible and 1 or 0, mp.get_time(), 0.18)
     if not visible then args.thumbnail:clear() end
     args.render()
+    return true
   end
 
   function service:show()
@@ -74,7 +79,11 @@ function controller.new(args)
         runtime.timers.hide:kill()
         runtime.timers.hide = nil
       end
-      self:animate_visibility(false)
+      local visibility_changed = self:animate_visibility(false)
+      if not visibility_changed and args.pointer_feedback_changed and
+        args.pointer_feedback_changed() then
+        args.render()
+      end
     end
   end
 
@@ -149,6 +158,22 @@ function controller.new(args)
   end
 
   function service:on_primary_button(event)
+    if event and event.canceled then
+      runtime.pointer.active = nil
+      runtime.pointer.pending_click = nil
+      runtime.pointer.window_dragging = nil
+      if runtime.pointer.click_timer then
+        runtime.pointer.click_timer:kill()
+        runtime.pointer.click_timer = nil
+      end
+      runtime.seek.dragging, runtime.chapter.dragging_scroll = false, false
+      runtime.volume.dragging = false
+      runtime.playlist.drag_from, runtime.playlist.drag_to = nil, nil
+      runtime.playlist.drag_start_y = nil
+      runtime.playlist.dragging_scroll = false
+      runtime.seek.position, runtime.seek.offset_x = nil, 0
+      return
+    end
     if event and event.event == "down" then
       self:update_mouse()
       local name = args.hitbox_at_cursor()

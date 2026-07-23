@@ -39,6 +39,38 @@ function animation_coordinator.new(args)
     return false
   end
 
+  function service:edge_targets()
+    local pointer = runtime.pointer
+    local controller_bounds = runtime.controller.bounds
+    local window_controls_bounds = runtime.window_controls.bounds
+    local over_controller = (controller_bounds and args.mouse_in(controller_bounds)) or
+      (window_controls_bounds and args.mouse_in(window_controls_bounds))
+    local context_visible = runtime.context_menu.open or
+      runtime.context_menu.pending_x ~= nil or
+      runtime.context_menu.animation:is_running() or
+      runtime.context_menu.animation.value > 0.001 or
+      runtime.context_menu.width_animation:is_running() or
+      runtime.context_menu.height_animation:is_running()
+    local modal = runtime.update.open or context_visible or runtime.playlist.open or
+      runtime.playlist.animation:is_running() or
+      runtime.chapter.open or runtime.chapter.animation.value > 0.001 or
+      runtime.settings.open or runtime.settings.animation.value > 0.001
+    local edge_modal = modal or runtime.subtitle.open or runtime.audio.open or
+      runtime.subtitle.animation:is_running() or runtime.audio.animation:is_running()
+    local edge_allowed = args.single_click_actions_enabled() and
+      not edge_modal and not over_controller and
+      pointer.x >= 0 and pointer.y >= args.edge_seek_top_inset()
+    local edge_width = runtime.viewport.w * args.seeking_zone_fraction()
+    return edge_allowed and pointer.x <= edge_width,
+      edge_allowed and pointer.x >= runtime.viewport.w - edge_width
+  end
+
+  function service:pointer_feedback_changed()
+    local wants_left, wants_right = self:edge_targets()
+    return runtime.edge_seek.left.opacity.target ~= (wants_left and 1 or 0) or
+      runtime.edge_seek.right.opacity.target ~= (wants_right and 1 or 0)
+  end
+
   function service:update(now)
     runtime.controller.opacity:update(now)
     local context_visible = runtime.context_menu.open or
@@ -83,19 +115,7 @@ function animation_coordinator.new(args)
     runtime.playback_indicator.opacity:update(now)
     runtime.playback_indicator.scale:update(now)
 
-    local pointer = runtime.pointer
-    local controller_bounds = runtime.controller.bounds
-    local window_controls_bounds = runtime.window_controls.bounds
-    local over_controller = (controller_bounds and args.mouse_in(controller_bounds)) or
-      (window_controls_bounds and args.mouse_in(window_controls_bounds))
-    local edge_modal = modal or runtime.subtitle.open or runtime.audio.open or
-      runtime.subtitle.animation:is_running() or runtime.audio.animation:is_running()
-    local edge_allowed = args.single_click_actions_enabled() and
-      not edge_modal and not over_controller and
-      pointer.x >= 0 and pointer.y >= args.edge_seek_top_inset()
-    local edge_width = runtime.viewport.w * args.seeking_zone_fraction()
-    local wants_left = edge_allowed and pointer.x <= edge_width
-    local wants_right = edge_allowed and pointer.x >= runtime.viewport.w - edge_width
+    local wants_left, wants_right = self:edge_targets()
     for _, item in ipairs({
       {state = runtime.edge_seek.left, visible = wants_left},
       {state = runtime.edge_seek.right, visible = wants_right}

@@ -659,6 +659,9 @@ controller = controller_module.new({
   set_cursor_autohide = function(value)
     runtime_host:set_cursor_autohide(value)
   end,
+  pointer_feedback_changed = function()
+    return animation_coordinator:pointer_feedback_changed()
+  end,
   render = function() render() end, recreate_app = recreate_app
 })
 
