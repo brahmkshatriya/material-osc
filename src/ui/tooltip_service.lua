@@ -7,9 +7,10 @@ function tooltip_service.new(args)
 
   local service = {delay = delay, slide_distance = args.slide_distance or 18}
 
-  function service:request(text, bounds)
+  function service:request(text, bounds, allow_when_suppressed)
     if not args.enabled() or not text then return end
     state.requested = true
+    state.allow_when_suppressed = allow_when_suppressed == true
     if state.hover_key ~= text then
       state.hover_key = text
       state.hover_start = mp.get_time()
@@ -36,6 +37,7 @@ function tooltip_service.new(args)
 
   function service:begin_frame()
     state.requested = false
+    state.allow_when_suppressed = false
   end
 
   function service:update(now)
@@ -50,7 +52,8 @@ function tooltip_service.new(args)
   end
 
   function service:finalize(now, suppressed)
-    local ready = not suppressed and state.requested and state.hover_key and
+    local ready = (not suppressed or state.allow_when_suppressed) and
+      state.requested and state.hover_key and
       now - state.hover_start >= delay
     state.opacity:set_target(ready and 1 or 0, now, fade_duration)
     state.slide:set_target(ready and 1 or 0)

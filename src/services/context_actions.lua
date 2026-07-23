@@ -24,6 +24,7 @@ end
 
 function context_actions.new(args)
   local mp, utils = args.mp, args.utils
+  local properties = args.properties
   local service = {}
 
   local function is_url(path)
@@ -37,7 +38,12 @@ function context_actions.new(args)
   end
 
   local function media_information_visible()
-    local bindings = mp.get_property_native("input-bindings", {}) or {}
+    local bindings
+    if properties then
+      bindings = properties["input-bindings"] or {}
+    else
+      bindings = mp.get_property_native("input-bindings", {}) or {}
+    end
     for _, binding in ipairs(bindings) do
       local command = type(binding) == "table" and binding.cmd or nil
       if type(command) == "string" and
@@ -177,7 +183,9 @@ function context_actions.new(args)
       "seeking_zone_percentage",
       "seek_step_seconds",
       "show_mini_seekbar",
-      "force_window_controls",
+      "window_controls",
+      "youtube_quality",
+      "force_hwdec",
       "max_volume_percentage",
       "directory_playlist",
       "directory_playlist_sort"

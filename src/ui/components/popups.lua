@@ -183,13 +183,23 @@ local function new_chapter_popup(deps)
       return apply_modifier_size(self.modifier, {w = 0, h = 0}, parent)
     end
     function node:draw(ass, bounds)
-      local stride = self.row_height + self.row_gap
-      for slot = 1, math.min(self.visible_count, #self.rows) do
+      local slot_count = math.min(self.visible_count, #self.rows,
+        math.max(0, #self.items - self.first_visible_index))
+      if slot_count <= 0 or bounds.h <= 0 then return end
+      local natural_height = slot_count * self.row_height +
+        math.max(0, slot_count - 1) * self.row_gap
+      local scale = math.min(1, bounds.h / math.max(1, natural_height))
+      local row_height = self.row_height * scale
+      local row_gap = self.row_gap * scale
+      local stride = row_height + row_gap
+      for slot = 1, slot_count do
         local row = self.rows[slot]
         if not row.chapter then break end
         local y = bounds.y + (slot - 1) * stride
-        if y + self.row_height > bounds.y2 + 0.5 then break end
-        draw_node(row, ass, Rect({x = bounds.x, y = y, w = bounds.w, h = self.row_height}))
+        row.modifier.fixed_height = row_height
+        draw_node(row, ass, Rect({
+          x = bounds.x, y = y, w = bounds.w, h = row_height
+        }))
       end
     end
     return node
@@ -264,6 +274,7 @@ local function new_chapter_popup(deps)
     local node = {
       chapters = {}, interactive = false, text_alpha = "00",
       secondary_alpha = "00", hover_alpha = "00", selected_alpha = "00",
+      layout_height = nil,
       modifier = Modifier():fillMaxWidth():fillMaxHeight()
     }
     node.column = LazyChapterColumn(on_selected)
@@ -279,7 +290,12 @@ local function new_chapter_popup(deps)
     end
     function node:draw(ass, bounds)
       local row_height, row_gap = dp(44), dp(4)
-      local visible_count = math.max(1, math.floor((bounds.h + row_gap) / (row_height + row_gap)))
+      -- Capacity follows the settled layout, not the temporarily undersized
+      -- morph bounds. Otherwise crossing a row boundary during the spring can
+      -- make a scrollbar flash for one or two frames.
+      local capacity_height = self.layout_height or bounds.h
+      local visible_count = math.max(1,
+        math.floor((capacity_height + row_gap) / (row_height + row_gap)))
       local max_scroll = math.max(0, #self.chapters - visible_count)
       chapter_state.scroll_index = clamp(chapter_state.scroll_index, 0, max_scroll)
       local horizontal_padding = dp(8)
@@ -346,7 +362,10 @@ local function new_chapter_popup(deps)
       self.list:update({
         chapters = self.chapters,
         interactive = self.interactive,
-        opacity = self.opacity,
+        opacity = self.scrollbar_opacity ~= nil and
+          self.scrollbar_opacity or self.opacity,
+        layout_height = self.layout_height and
+          math.max(0, self.layout_height - dp(72)) or nil,
         text_alpha = self.text_alpha,
         secondary_alpha = self.secondary_alpha,
         hover_alpha = self.hover_alpha,
@@ -696,6 +715,8 @@ function popups.new(services)
   local Modifier, Rect = ui.Modifier, ui.Rect
   local apply_modifier_size, measure_node = ui.apply_modifier_size, ui.measure_node
   local draw_node, mouse_in = ui.draw_node, ui.mouse_in
+  local push_clip, pop_clip = ui.push_clip, ui.pop_clip
+  local request_tooltip = ui.request_tooltip
   local set_settings_page = navigation.set_settings_page
   local select_stream_quality = player.select_stream_quality
   local open_subtitle_file_picker = player.open_subtitle_file_picker
@@ -739,11 +760,23 @@ function popups.new(services)
       local value = clamp(source.value, 0, 1)
       return args.opacity_animation and value or smooth_step(value)
     end
+    local function morph_progress()
+      if not args.morph then return 1 end
+      local source = args.morph_animation or args.state.animation
+      return clamp(source.value, 0, 1.05)
+    end
     function node:update(snapshot)
       local opacity = popup_opacity()
-      local interactive = args.state.open
+      if not args.state.open and opacity <= 0 then
+        self.backdrop:set_enabled(false)
+        return
+      end
+      local progress = morph_progress()
+      local interactive = args.state.open and
+        (not args.morph or progress >= 0.9)
       self.backdrop:set_enabled(args.state.open or opacity > 0)
-      args.update_popup(self.popup, snapshot, opacity, interactive)
+      args.update_popup(self.popup, snapshot, opacity, interactive,
+        progress, input.hitboxes[args.anchor_name])
     end
     function node:measure(parent)
       return apply_modifier_size(self.modifier, {w = 0, h = 0}, parent)
@@ -763,6 +796,9 @@ function popups.new(services)
           desired_x = anchor.x2 - popup_size.w + (args.anchor_offset_x or 0)
         end
       end
+      -- Keep the final bottom edge fixed while the dimensions spring. With
+      -- start alignment Chapter pivots around its bottom-left corner; with
+      -- end alignment Settings pivots around its bottom-right corner.
       local desired_y = anchor and
         (anchor.y1 - popup_size.h - dp(8)) or
         (bounds.y + (bounds.h - popup_size.h) / 2)
@@ -770,11 +806,6 @@ function popups.new(services)
         bounds.x2 - margin - popup_size.w)
       local y = clamp(desired_y, bounds.y + margin,
         bounds.y2 - margin - popup_size.h)
-      if args.slide_distance then
-        local slide_animation = args.slide_animation or args.state.animation
-        local slide_progress = clamp(slide_animation.value, 0, 1.05)
-        y = y + args.slide_distance * (1 - slide_progress)
-      end
       local popup_bounds = Rect({x = x, y = y, w = popup_size.w, h = popup_size.h})
       args.state.bounds = popup_bounds
       draw_node(self.popup, ass, popup_bounds)
@@ -793,6 +824,22 @@ function popups.new(services)
     }
   end
 
+  local function morph_size(anchor_size, target_size, progress, fallback)
+    local origin = anchor_size or fallback
+    return origin + (target_size - origin) * progress
+  end
+
+  local function morph_content_opacity(progress)
+    -- Match the context menu: the shell establishes itself first, then its
+    -- contents resolve during the final 38% of the fade.
+    return smooth_step(clamp((progress - 0.62) / 0.38, 0, 1))
+  end
+
+  local function morph_shell_opacity(open, fade)
+    return open and (0.53 + clamp(fade, 0, 1) * 0.43) or
+      clamp(fade, 0, 1) * 0.96
+  end
+
   local function ChapterCloseButton(args)
     local node = {
       alpha = "00",
@@ -800,6 +847,7 @@ function popups.new(services)
       enabled = false,
       on_click = args.on_click,
       icon = args.icon or "close",
+      tooltip = args.tooltip or (args.icon == "arrow_back" and "Back" or "Close"),
       modifier = Modifier():width(dp(36)):height(dp(36))
     }
     node.modifier:clickable({
@@ -823,6 +871,9 @@ function popups.new(services)
       end
       draw_icon(ass, bounds.x + bounds.w / 2, bounds.y + bounds.h / 2,
            self.icon, "#FFFFFF", 24, self.alpha)
+      if self.enabled and self.tooltip and mouse_in(bounds) then
+        request_tooltip(self.tooltip, bounds, true)
+      end
     end
     return node
   end
@@ -842,7 +893,8 @@ function popups.new(services)
         node.actions[#node.actions + 1] = ChapterCloseButton({
           name = action.name,
           on_click = action.on_click,
-          icon = action.icon
+          icon = action.icon,
+          tooltip = action.tooltip
         })
       end
     end
@@ -1272,6 +1324,7 @@ function popups.new(services)
     node.header = ChapterHeader(on_back, "Subtitle Settings", "arrow_back", {
       name = "subtitle-style-reset",
       icon = "restart_alt",
+      tooltip = "Reset subtitle settings",
       on_click = reset_subtitle_style
     })
     node.delay = SubtitleAdjustRow("subtitle-delay", "Timing", 
@@ -1558,6 +1611,7 @@ function popups.new(services)
     end
     node.header = ChapterHeader(on_back, "Video Settings", "arrow_back", {
       name = "video-settings-reset", icon = "restart_alt",
+      tooltip = "Reset video settings",
       on_click = reset_video_settings
     })
     node.crop_row = SettingsActionRow("video-settings-crop", "crop",
@@ -1657,14 +1711,17 @@ function popups.new(services)
     node.speed_row = SettingsActionRow("settings-speed-row", "speed",
       function() set_settings_page("speed") end)
     node.video = TrackPopup(function() set_settings_page("root") end, {
-      name = "settings-video", title = "Video Track", action_icon = "arrow_back",
+      name = "settings-video", title = "Video", action_icon = "arrow_back",
       right_action = {
         name = "settings-video-options", icon = "tune",
+        tooltip = "Video settings",
         on_click = function() set_settings_page("video_settings") end
       },
       state = settings_state,
       on_select = function(item)
-        if item.image then
+        if item.id == 0 then
+          mp.set_property("vid", "no")
+        elseif item.image then
           open_image_track(item)
           return false
         elseif item.stream_quality then select_stream_quality(item)
@@ -1672,7 +1729,7 @@ function popups.new(services)
       end
     })
     node.audio = TrackPopup(function() set_settings_page("root") end, {
-      name = "settings-audio", title = "Audio Track", action_icon = "arrow_back",
+      name = "settings-audio", title = "Audio", action_icon = "arrow_back",
       state = settings_state,
       on_select = function(item)
         if item.id == 0 then mp.set_property("aid", "no")
@@ -1688,11 +1745,13 @@ function popups.new(services)
         {
           name = "settings-secondary-subtitles",
           icon = "filter_2",
+          tooltip = "Secondary subtitles",
           on_click = function() set_settings_page("secondary_subtitles") end
         },
         {
           name = "settings-subtitles-style",
           icon = "subtitles_gear",
+          tooltip = "Subtitle settings",
           on_click = function() set_settings_page("subtitle_style") end
         }
       },
@@ -1750,6 +1809,7 @@ function popups.new(services)
         on_click = open_shader_link_picker},
       right_action = {
         name = "settings-video-shaders-clear", icon = "delete_sweep",
+        tooltip = "Clear shaders",
         on_click = clear_shaders
       },
       is_selected = function() return false end,
@@ -1779,11 +1839,11 @@ function popups.new(services)
         title_alpha = ass_alpha_for_opacity((self.opacity or 0) * 0.70),
         hover_alpha = self.hover_alpha,
         interactive = self.interactive})
-      common.label, common.value = "Video Track (" ..
+      common.label, common.value = "Video (" ..
         tostring(self.video_track_count or #self.video_items) .. ")",
         selected_track_label(self.video_items, self.video_id, "None")
       self.video_row:update(common)
-      common.label, common.value = "Audio Track (" ..
+      common.label, common.value = "Audio (" ..
         math.max(0, #self.audio_items - 1) .. ")",
         selected_track_label(self.audio_items, self.audio_id, "None")
       self.audio_row:update(common)
@@ -1855,30 +1915,38 @@ function popups.new(services)
       return apply_modifier_size(self.modifier, {w = self.width, h = self.height}, parent)
     end
     function node:draw(ass, bounds)
-      if settings_state.page == "video" then return self.video:draw(ass, bounds) end
-      if settings_state.page == "audio" then return self.audio:draw(ass, bounds) end
-      if settings_state.page == "subtitles" then return self.subtitles:draw(ass, bounds) end
+      local page
+      if settings_state.page == "video" then page = self.video end
+      if settings_state.page == "audio" then page = self.audio end
+      if settings_state.page == "subtitles" then page = self.subtitles end
       if settings_state.page == "secondary_subtitles" then
-        return self.secondary_subtitles:draw(ass, bounds)
+        page = self.secondary_subtitles
       end
       if settings_state.page == "auto_captions" then
-        return self.auto_captions:draw(ass, bounds)
+        page = self.auto_captions
       end
-      if settings_state.page == "speed" then return self.speed:draw(ass, bounds) end
+      if settings_state.page == "speed" then page = self.speed end
       if settings_state.page == "subtitle_style" then
-        return self.subtitle_style:draw(ass, bounds)
+        page = self.subtitle_style
       end
       if settings_state.page == "video_settings" then
-        return self.video_settings:draw(ass, bounds)
+        page = self.video_settings
       end
       if settings_state.page == "video_crop" then
-        return self.video_crop:draw(ass, bounds)
+        page = self.video_crop
       end
       if settings_state.page == "video_shaders" then
-        return self.video_shaders:draw(ass, bounds)
+        page = self.video_shaders
+      end
+      if page then
+        push_clip(bounds)
+        page:draw(ass, bounds)
+        pop_clip()
+        return
       end
       draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2,
         dp(30), "#050708", self.panel_alpha)
+      push_clip(bounds)
       draw_node(self.header, ass, Rect({x = bounds.x, y = bounds.y, w = bounds.w, h = dp(56)}))
       local y = bounds.y + dp(64)
       local rows = {self.video_row}
@@ -1890,28 +1958,56 @@ function popups.new(services)
           w = bounds.w - dp(16), h = dp(44)}))
         y = y + dp(48)
       end
+      pop_clip()
     end
     return node
   end
 
+  local function close_or_reverse_from_anchor(dialog_state, anchor_name, set_open)
+    if not dialog_state.open then
+      local anchor = input.hitboxes[anchor_name]
+      if anchor and mouse_in(anchor) then
+        set_open(true)
+        return
+      end
+    end
+    set_open(false)
+  end
+
   local function ChapterDialogHost()
-    local close = function() set_chapter_dialog_open(false) end
+    local close = function()
+      close_or_reverse_from_anchor(
+        chapter_state, "chapter-display", set_chapter_dialog_open)
+    end
     return PopupHost({
       name = "chapter-dialog", state = chapter_state,
       anchor_name = "chapter-display", anchor_start = true, on_close = close,
       opacity_animation = chapter_state.fade,
-      slide_animation = chapter_state.animation, slide_distance = dp(18),
+      morph = true,
       popup = ChapterPopup(close),
-      update_popup = function(popup, snapshot, opacity, interactive)
-        local props = popup_visual_props(opacity, interactive)
-        props.width = math.max(dp(160), math.min(dp(320), viewport.w - dp(24)))
+      update_popup = function(popup, snapshot, opacity, interactive,
+          progress, anchor)
+        local content_opacity = opacity * morph_content_opacity(opacity)
+        local props = popup_visual_props(content_opacity, interactive)
+        props.opacity = content_opacity
+        props.panel_alpha = ass_alpha_for_opacity(
+          morph_shell_opacity(chapter_state.open, opacity))
+        props.scrollbar_opacity =
+          progress >= 0.9 and content_opacity or 0
+        local target_width =
+          math.max(dp(160), math.min(dp(320), viewport.w - dp(24)))
         local content_h = dp(72) + #snapshot.chapters * dp(48)
         if #snapshot.chapters > 0 then content_h = content_h - dp(4) end
         local max_h = math.max(dp(116), math.min(dp(480), viewport.h - dp(24)))
         local whole_rows = math.max(1,
           math.floor((max_h - dp(68)) / dp(48)))
         max_h = dp(68) + whole_rows * dp(48)
-        props.height = clamp(content_h, dp(116), max_h)
+        local target_height = clamp(content_h, dp(116), max_h)
+        props.width = morph_size(anchor and anchor.w, target_width,
+          progress, dp(42))
+        props.height = morph_size(anchor and anchor.h, target_height,
+          progress, dp(42))
+        props.layout_height = target_height
         props.chapters = snapshot.chapters
         props.selected_index = snapshot.chapter_index or -1
         popup:update(props)
@@ -1938,13 +2034,19 @@ function popups.new(services)
   end
 
   local function SettingsDialogHost()
+    local close_from_backdrop = function()
+      close_or_reverse_from_anchor(
+        settings_state, "settings-button", set_settings_dialog_open)
+    end
     return PopupHost({
       name = "settings-dialog", state = settings_state,
       anchor_name = "settings-button",
-      slide_distance = dp(18),
-      on_close = function() set_settings_dialog_open(false) end,
+      opacity_animation = settings_state.fade,
+      morph = true,
+      on_close = close_from_backdrop,
       popup = SettingsPopup(function() set_settings_dialog_open(false) end),
-      update_popup = function(popup, snapshot, opacity, interactive)
+      update_popup = function(popup, snapshot, opacity, interactive,
+          progress, anchor)
         local video_items = snapshot.video_items or {}
         local audio_items = snapshot.audio_items or {}
         local subtitle_items = snapshot.subtitle_items or {}
@@ -1999,16 +2101,34 @@ function popups.new(services)
           settings_state.height_animation:set_target(target_h)
           settings_state.resize_started = true
         elseif not settings_state.transition_phase then
-          settings_state.width_animation:snap(target_w)
-          settings_state.height_animation:snap(target_h)
+          local fully_open = settings_state.open and
+            not settings_state.animation:is_running() and
+            settings_state.animation.value >= 0.999
+          if fully_open then
+            -- Track/content changes can alter the target without going through
+            -- a page transition. Once open, always spring to those dimensions
+            -- with the same geometry response used by the context menu.
+            settings_state.width_animation:set_target(target_w)
+            settings_state.height_animation:set_target(target_h)
+          else
+            -- Opening already morphs from the launcher, so establish the final
+            -- page size without introducing a second competing spring.
+            settings_state.width_animation:snap(target_w)
+            settings_state.height_animation:snap(target_h)
+          end
         end
-        local content_opacity = opacity * settings_state.content_animation.value
+        local content_opacity = opacity * settings_state.content_animation.value *
+          morph_content_opacity(opacity)
         local props = popup_visual_props(content_opacity, interactive)
         props.opacity = opacity
-        props.panel_alpha = ass_alpha_for_opacity(opacity * 0.96)
-        props.scrollbar_opacity = content_opacity
-        props.width = settings_state.width_animation.value
-        props.height = settings_state.height_animation.value
+        props.panel_alpha = ass_alpha_for_opacity(
+          morph_shell_opacity(settings_state.open, opacity))
+        props.scrollbar_opacity =
+          progress >= 0.9 and content_opacity or 0
+        props.width = morph_size(anchor and anchor.w,
+          settings_state.width_animation.value, progress, dp(42))
+        props.height = morph_size(anchor and anchor.h,
+          settings_state.height_animation.value, progress, dp(42))
         props.layout_height = target_h
         props.video_items = video_items
         props.video_id = snapshot.video_id

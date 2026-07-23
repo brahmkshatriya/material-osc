@@ -13,8 +13,9 @@ function controller.new(args)
     if runtime.controller.input_suppressed then
       visible = false
     end
-    if not visible and not runtime.controller.visible and
-      runtime.controller.opacity.target == 0 then
+    local target = visible and 1 or 0
+    if runtime.controller.visible == visible and
+      runtime.controller.opacity.target == target then
       return false
     end
     local was_visible = runtime.controller.visible or
@@ -27,28 +28,57 @@ function controller.new(args)
     elseif was_visible then
       runtime.controller.hide_cursor_after_fade = true
     end
-    runtime.controller.opacity:set_target(visible and 1 or 0, mp.get_time(), 0.18)
+    runtime.controller.opacity:set_target(target, mp.get_time(), 0.18)
     if not visible then args.thumbnail:clear() end
-    args.render()
+    if args.render_visibility then args.render_visibility()
+    else args.render() end
     return true
   end
 
-  function service:show()
-    if runtime.controller.input_suppressed then
-      self:animate_visibility(false)
+  function service:cancel_hide_timer()
+    runtime.controller.hide_deadline = nil
+    if not runtime.timers.hide then return end
+    runtime.timers.hide:kill()
+    runtime.timers.hide = nil
+  end
+
+  function service:arm_hide_timer()
+    local timeout = math.max(0, tonumber(opts.mouse_timeout) or 0)
+    if timeout <= 0 then
+      self:cancel_hide_timer()
       return
     end
-    self:animate_visibility(true)
-    if runtime.timers.hide then runtime.timers.hide:kill(); runtime.timers.hide = nil end
-    if opts.mouse_timeout <= 0 then return end
-    runtime.timers.hide = mp.add_timeout(opts.mouse_timeout, function()
+    runtime.controller.hide_deadline = mp.get_time() + timeout
+    if runtime.timers.hide then return end
+
+    local function check_deadline()
+      runtime.timers.hide = nil
+      local deadline = runtime.controller.hide_deadline
+      if not deadline then return end
+      local remaining = deadline - mp.get_time()
+      if remaining > 0.001 then
+        runtime.timers.hide = mp.add_timeout(remaining, check_deadline)
+        return
+      end
+      runtime.controller.hide_deadline = nil
       self:update_mouse()
       if self:interaction_requires_visibility() then
         self:show()
       else
         self:animate_visibility(false)
       end
-    end)
+    end
+
+    runtime.timers.hide = mp.add_timeout(timeout, check_deadline)
+  end
+
+  function service:show()
+    if runtime.controller.input_suppressed then
+      return self:animate_visibility(false)
+    end
+    local visibility_changed = self:animate_visibility(true)
+    self:arm_hide_timer()
+    return visibility_changed
   end
 
   function service:interaction_requires_visibility()
@@ -73,34 +103,100 @@ function controller.new(args)
   function service:sync_visibility_with_pointer()
     local pointer_active = runtime.pointer.x >= 0 and runtime.pointer.y >= 0
     if (opts.show_on_mouse_move and pointer_active) or self:should_show_at_pointer() then
-      self:show()
+      return self:show()
     else
-      if runtime.timers.hide then
-        runtime.timers.hide:kill()
-        runtime.timers.hide = nil
+      self:cancel_hide_timer()
+      return self:animate_visibility(false)
+    end
+  end
+
+  function service:pointer_visual_feedback_changed()
+    local name, box = args.hitbox_at_cursor()
+    local hover_changed = runtime.pointer.hover_hitbox ~= name
+    runtime.pointer.hover_hitbox = name
+
+    local seek_x = nil
+    if name == "seekbar" and box then
+      seek_x = math.floor(math.max(box.x1,
+        math.min(box.x2, runtime.pointer.x)) + 0.5)
+    end
+    local seek_changed = runtime.pointer.seek_hover_x ~= seek_x
+    runtime.pointer.seek_hover_x = seek_x
+
+    local context_changed = false
+    if runtime.context_menu.open then
+      if runtime.pointer.context_hover_hitbox ~= name then
+        runtime.pointer.context_hover_hitbox = name
+        context_changed = true
       end
-      local visibility_changed = self:animate_visibility(false)
-      if not visibility_changed and args.pointer_feedback_changed and
-        args.pointer_feedback_changed() then
+    else
+      runtime.pointer.context_hover_hitbox = nil
+    end
+
+    local edge_changed = args.pointer_feedback_changed and
+      args.pointer_feedback_changed()
+    if hover_changed or context_changed or edge_changed then
+      return "interaction"
+    end
+    if seek_changed then return "dynamic" end
+    return nil
+  end
+
+  function service:dispatch_mouse_move()
+    runtime.timers.pointer_move = nil
+    runtime.pointer.last_move_dispatch = mp.get_time()
+    local cursor_timeout = math.max(100,
+      math.floor(math.max(0, tonumber(opts.mouse_timeout) or 0) * 1000 + 0.5))
+    args.set_cursor_autohide(cursor_timeout)
+    local active = runtime.pointer.active
+    if active and active.on_move then active.on_move(active) end
+    local rendered = self:sync_visibility_with_pointer()
+    local feedback_mode = self:pointer_visual_feedback_changed()
+    if feedback_mode and not rendered then
+      if feedback_mode == "dynamic" and args.render_dynamic then
+        args.render_dynamic()
+      else
         args.render()
       end
     end
   end
 
   function service:on_mouse_move()
-    local cursor_timeout = math.max(100,
-      math.floor(math.max(0, tonumber(opts.mouse_timeout) or 0) * 1000 + 0.5))
-    args.set_cursor_autohide(cursor_timeout)
     self:update_mouse()
-    local active = runtime.pointer.active
-    if active and active.on_move then active.on_move(active) end
-    self:sync_visibility_with_pointer()
+    local interval = args.pointer_interval and args.pointer_interval() or
+      runtime.timers.frame_interval or (1 / 60)
+    local elapsed = mp.get_time() - runtime.pointer.last_move_dispatch
+    if elapsed >= math.max(0, interval - 0.0005) then
+      if runtime.timers.pointer_move then
+        runtime.timers.pointer_move:kill()
+        runtime.timers.pointer_move = nil
+      end
+      self:dispatch_mouse_move()
+    elseif not runtime.timers.pointer_move then
+      runtime.timers.pointer_move = mp.add_timeout(
+        math.max(0.0005, interval - elapsed), function()
+          self:dispatch_mouse_move()
+        end)
+    end
   end
 
   function service:on_mouse_leave()
+    if runtime.timers.pointer_move then
+      runtime.timers.pointer_move:kill()
+      runtime.timers.pointer_move = nil
+    end
     runtime.pointer.x, runtime.pointer.y = -1, -1
+    runtime.pointer.last_move_dispatch = mp.get_time()
     args.thumbnail:clear()
-    self:sync_visibility_with_pointer()
+    local rendered = self:sync_visibility_with_pointer()
+    local feedback_mode = self:pointer_visual_feedback_changed()
+    if feedback_mode and not rendered then
+      if feedback_mode == "dynamic" and args.render_dynamic then
+        args.render_dynamic()
+      else
+        args.render()
+      end
+    end
   end
 
   function service:on_primary_down()
@@ -196,6 +292,8 @@ function controller.new(args)
   function service:on_secondary_down()
     self:update_mouse()
     if runtime.update.open then return end
+    runtime.pointer.hover_hitbox = nil
+    runtime.pointer.context_hover_hitbox = nil
     args.open_context_menu(runtime.pointer.x, runtime.pointer.y)
   end
 

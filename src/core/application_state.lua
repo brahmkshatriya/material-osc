@@ -3,6 +3,9 @@ local application_state = {}
 local TOOLTIP_FADE_DURATION = 0.14
 local TOOLTIP_SPRING_STIFFNESS = 420
 local TOOLTIP_SPRING_DAMPING = 20
+local POPUP_FADE_DURATION = 0.18
+local POPUP_MORPH_STIFFNESS = 560
+local POPUP_MORPH_DAMPING = 38
 
 function application_state.new(args)
   local opts = args.opts
@@ -16,7 +19,11 @@ function application_state.new(args)
       bounds = nil
     },
     window_controls = {bounds = nil, reveal_bounds = nil},
-    pointer = {x = -1, y = -1, active = nil},
+    pointer = {
+      x = -1, y = -1, active = nil,
+      hover_hitbox = nil, context_hover_hitbox = nil,
+      seek_hover_x = nil, last_move_dispatch = -math.huge
+    },
     context_menu = {
       open = false, x = 0, y = 0,
       close_x = nil, close_y = nil, bounds = nil,
@@ -79,42 +86,95 @@ function application_state.new(args)
       width = 0, height = 0, disabled = true, available = false,
       visible = false
     },
-    timers = {hide = nil, frame = nil, progress = nil, frame_interval = 1 / 60},
+    timers = {
+      hide = nil, frame = nil, render = nil, progress = nil,
+      pointer_move = nil,
+      frame_interval = 1 / 60
+    },
     loading = {started_ms = args.now_ms(), quality_switching = false},
     media = {loading = true},
     effects = {order = {}, by_key = {}},
+    properties = {},
     snapshot = {},
-    frame = {rendering = false, pending = false}
+    frame = {
+      rendering = false,
+      pending = false,
+      request_mode = nil,
+      last_render = -math.huge
+    }
   }
 
   runtime.controller.opacity = animation.tween({
     initial = opts.show_on_mouse_move and 1 or 0, duration = 0.18
   })
   runtime.context_menu.animation = animation.tween({
-    initial = 0, duration = 0.18
+    initial = 0, duration = POPUP_FADE_DURATION
   })
   runtime.context_menu.width_animation = animation.spring({
-    initial = 28, stiffness = 560, damping = 38
+    initial = 28,
+    stiffness = POPUP_MORPH_STIFFNESS,
+    damping = POPUP_MORPH_DAMPING
   })
   runtime.context_menu.height_animation = animation.spring({
-    initial = 28, stiffness = 560, damping = 38
+    initial = 28,
+    stiffness = POPUP_MORPH_STIFFNESS,
+    damping = POPUP_MORPH_DAMPING
   })
-  runtime.volume.animation = animation.spring({initial = 0, stiffness = 360, damping = 24})
-  runtime.chapter.animation = animation.spring({initial = 0, stiffness = 380, damping = 26})
-  runtime.chapter.fade = animation.tween({initial = 0, duration = 0.18})
-  runtime.playlist.animation = animation.spring({initial = 0, stiffness = 380, damping = 26})
+  runtime.volume.animation = animation.spring({
+    initial = 0,
+    stiffness = POPUP_MORPH_STIFFNESS,
+    damping = POPUP_MORPH_DAMPING
+  })
+  runtime.chapter.animation = animation.spring({
+    initial = 0,
+    stiffness = POPUP_MORPH_STIFFNESS,
+    damping = POPUP_MORPH_DAMPING
+  })
+  runtime.chapter.fade = animation.tween({
+    initial = 0, duration = POPUP_FADE_DURATION
+  })
+  runtime.playlist.animation = animation.tween({
+    initial = 0, duration = POPUP_FADE_DURATION
+  })
   runtime.playlist.width_animation = animation.spring({
-    initial = 118, stiffness = 560, damping = 38
+    initial = 118,
+    stiffness = POPUP_MORPH_STIFFNESS,
+    damping = POPUP_MORPH_DAMPING
   })
   runtime.playlist.height_animation = animation.spring({
-    initial = 42, stiffness = 560, damping = 38
+    initial = 42,
+    stiffness = POPUP_MORPH_STIFFNESS,
+    damping = POPUP_MORPH_DAMPING
   })
-  runtime.subtitle.animation = animation.spring({initial = 0, stiffness = 380, damping = 26})
-  runtime.audio.animation = animation.spring({initial = 0, stiffness = 380, damping = 26})
-  runtime.settings.animation = animation.spring({initial = 0, stiffness = 380, damping = 26})
+  runtime.subtitle.animation = animation.spring({
+    initial = 0,
+    stiffness = POPUP_MORPH_STIFFNESS,
+    damping = POPUP_MORPH_DAMPING
+  })
+  runtime.audio.animation = animation.spring({
+    initial = 0,
+    stiffness = POPUP_MORPH_STIFFNESS,
+    damping = POPUP_MORPH_DAMPING
+  })
+  runtime.settings.animation = animation.spring({
+    initial = 0,
+    stiffness = POPUP_MORPH_STIFFNESS,
+    damping = POPUP_MORPH_DAMPING
+  })
+  runtime.settings.fade = animation.tween({
+    initial = 0, duration = POPUP_FADE_DURATION
+  })
   runtime.settings.content_animation = animation.tween({initial = 1, duration = 0.12})
-  runtime.settings.width_animation = animation.spring({initial = 320, stiffness = 560, damping = 38})
-  runtime.settings.height_animation = animation.spring({initial = 292, stiffness = 560, damping = 38})
+  runtime.settings.width_animation = animation.spring({
+    initial = 320,
+    stiffness = POPUP_MORPH_STIFFNESS,
+    damping = POPUP_MORPH_DAMPING
+  })
+  runtime.settings.height_animation = animation.spring({
+    initial = 292,
+    stiffness = POPUP_MORPH_STIFFNESS,
+    damping = POPUP_MORPH_DAMPING
+  })
   runtime.playback_indicator.opacity = animation.tween({initial = 0, duration = 0.18})
   runtime.playback_indicator.scale = animation.spring({initial = 1, stiffness = 520, damping = 32})
   for _, side in ipairs({"left", "right"}) do

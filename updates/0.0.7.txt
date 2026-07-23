@@ -1,0 +1,11 @@
+- You can now choose the maximum quality used when a YouTube video starts.
+- Hardware decoding is now enabled automatically for smoother playback and lower CPU use.
+- Window controls can now appear automatically when they are needed, such as in fullscreen or borderless windows.
+- Video tracks now include an Off option, and the Video and Audio menus are easier to understand.
+- Added helpful labels when hovering over settings and popup buttons.
+- The controls now use much less CPU, especially while hidden or idle.
+- Animations and mouse movement feel smoother on high-refresh-rate displays, including 120 Hz and 240 Hz screens.
+- Popups now share the same springy animation style, with smoother resizing and more natural opening points.
+- Fixed popup content briefly appearing outside its box, hidden rows, flashing scrollbars, and other animation glitches.
+- Chapter and Settings popups can now be opened and closed quickly with repeated clicks.
+- Polished the playlist animation, scrolling area, footer, and closing fade.

@@ -48,9 +48,15 @@ function player.new(args)
 
   function service:is_buffering()
     if runtime.loading.quality_switching then return true end
-    if mp.get_property_native("seeking") then return true end
-    if mp.get_property_native("paused-for-cache") then return true end
-    local state = mp.get_property_number("cache-buffering-state")
+    local properties = runtime.properties
+    if properties and properties.seeking then return true end
+    if properties and properties["paused-for-cache"] then return true end
+    local state
+    if properties then
+      state = tonumber(properties["cache-buffering-state"])
+    else
+      state = mp.get_property_number("cache-buffering-state")
+    end
     return state ~= nil and state > 0 and state < 100
   end
 

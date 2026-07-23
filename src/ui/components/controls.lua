@@ -6,6 +6,7 @@ function controls.new(services)
   local pointer, volume_state = state.pointer, state.volume
   local seek_state, tooltip_state = state.seek, state.tooltip
   local time_state, chapter_state = state.time, state.chapter
+  local settings_state = state.settings
   local get_snapshot = player.snapshot
   local dp, clamp = ui.dp, ui.clamp
   local smooth_step, lerp = ui.smooth_step, ui.lerp
@@ -27,6 +28,7 @@ function controls.new(services)
   local content_bounds = ui.content_bounds
   local draw_node, IconButton, TextItem = ui.draw_node, ui.IconButton, ui.TextItem
   local Visibility, Row, Pill = ui.Visibility, ui.Row, ui.Pill
+  local is_render_pass = ui.is_render_pass
 
   local function VolumeSlider()
     local node = {
@@ -130,6 +132,7 @@ function controls.new(services)
     node.button = IconButton({
       name = "volume-button",
       icon = "volume_up",
+      render_pass = "dynamic",
       tooltip = "Mute",
       on_click = function() mp.commandv("cycle", "mute") end,
       on_scroll_up = function()
@@ -142,6 +145,7 @@ function controls.new(services)
       end
     })
     node.slider = VolumeSlider()
+    node.slider.modifier.render_pass = "dynamic"
 
     function node:update(snapshot)
       local tooltip = nil
@@ -159,7 +163,17 @@ function controls.new(services)
     function node:measure(parent) return self.button:measure(parent) end
 
     function node:draw(ass, bounds)
+      self.bounds = bounds
       volume_state.button_bounds = bounds
+      if is_render_pass("base") then
+        draw_node(self.button, ass, bounds)
+        return
+      end
+      if is_render_pass("interaction") then
+        draw_node(self.button, ass, bounds)
+        return
+      end
+      if not is_render_pass("dynamic") then return end
       local popup_w = dp(42)
       local expanded_h = dp(142) + bounds.h + dp(4)
       local popup_x1 = bounds.x + bounds.w / 2 - popup_w / 2
@@ -228,6 +242,8 @@ function controls.new(services)
       return apply_modifier_size(self.modifier, {w = 0, h = 0}, parent)
     end
     function node:draw(ass, bounds)
+      self.bounds = bounds
+      if not is_render_pass("dynamic") then return end
       draw_seekbar(ass, bounds.x, bounds.y + dp(14), bounds.x2)
     end
     return node
@@ -255,6 +271,7 @@ function controls.new(services)
     node.volume = VolumeControl()
     node.time = TextItem({
       text = "0:00 / 0:00",
+      render_pass = "dynamic",
       modifier = Modifier():clickable({
         name = "time-display",
         on_click = function()
@@ -269,9 +286,12 @@ function controls.new(services)
       modifier = Modifier():clickable({
         name = "chapter-display",
         on_click = function()
-          chapter_state.scroll_index = math.max(0,
-            (get_snapshot().chapter_index or 0) - 2)
-          set_chapter_dialog_open(true)
+          local open = not chapter_state.open
+          if open then
+            chapter_state.scroll_index = math.max(0,
+              (get_snapshot().chapter_index or 0) - 2)
+          end
+          set_chapter_dialog_open(open)
         end
       }),
       child = Pill({
@@ -321,7 +341,9 @@ function controls.new(services)
       tooltip = "Take screenshot",
       on_click = function() mp.commandv("screenshot", "subtitles") end})
     node.settings = IconButton({name = "settings-button", icon = "settings", tooltip = "Settings",
-      on_click = function() set_settings_dialog_open(true) end})
+      on_click = function()
+        set_settings_dialog_open(not settings_state.open)
+      end})
     node.fullscreen = IconButton({name = "fullscreen-button", icon = "open_in_full", tooltip = "Fullscreen",
       on_click = function() mp.commandv("cycle", "fullscreen") end})
     node.ending = Pill({
@@ -329,26 +351,38 @@ function controls.new(services)
       modifier = Modifier():align({horizontal = "ending", vertical = "center"})
     })
 
-    function node:update(snapshot)
-      self.play:update({
-        icon = snapshot.paused and "play_arrow" or "pause",
-        tooltip = snapshot.paused and "Play" or "Pause"
-      })
-      self.volume:update(snapshot)
-      self.time.modifier.fixed_width = stable_time_width(snapshot)
+    function node:update(snapshot, static_changed)
+      if static_changed then
+        self.play:update({
+          icon = snapshot.paused and "play_arrow" or "pause",
+          tooltip = snapshot.paused and "Play" or "Pause"
+        })
+      end
+      local volume_progress = volume_state.animation.value
+      if static_changed or volume_state.dragging or
+        self.last_volume_progress ~= volume_progress then
+        self.volume:update(snapshot)
+        self.last_volume_progress = volume_progress
+      end
+      if static_changed or self.last_duration ~= snapshot.duration then
+        self.time.modifier.fixed_width = stable_time_width(snapshot)
+        self.last_duration = snapshot.duration
+      end
       self.time:update({text = snapshot.time_text})
-      self.chapter_text:update({text = snapshot.chapter_name or ""})
-      self.chapter:set_visible(snapshot.chapter_name ~= nil)
-      local subtitles_on = snapshot.subtitle_id ~= 0 and snapshot.sub_visibility
-      self.subtitles_visibility:set_visible(#snapshot.subtitle_items > 1)
-      self.subtitles:update({
-        icon = subtitles_on and "subtitles" or "subtitles_off",
-        tooltip = subtitles_on and "Hide subtitles" or "Show subtitles"
-      })
-      self.fullscreen:update({
-        icon = snapshot.fullscreen and "close_fullscreen" or "open_in_full",
-        tooltip = snapshot.fullscreen and "Exit fullscreen" or "Fullscreen"
-      })
+      if static_changed then
+        self.chapter_text:update({text = snapshot.chapter_name or ""})
+        self.chapter:set_visible(snapshot.chapter_name ~= nil)
+        local subtitles_on = snapshot.subtitle_id ~= 0 and snapshot.sub_visibility
+        self.subtitles_visibility:set_visible(#snapshot.subtitle_items > 1)
+        self.subtitles:update({
+          icon = subtitles_on and "subtitles" or "subtitles_off",
+          tooltip = subtitles_on and "Hide subtitles" or "Show subtitles"
+        })
+        self.fullscreen:update({
+          icon = snapshot.fullscreen and "close_fullscreen" or "open_in_full",
+          tooltip = snapshot.fullscreen and "Exit fullscreen" or "Fullscreen"
+        })
+      end
     end
 
     function node:measure(parent)
@@ -363,6 +397,11 @@ function controls.new(services)
     function node:draw(ass, bounds)
       draw_node(self.starting, ass, bounds)
       draw_node(self.ending, ass, bounds)
+    end
+
+    function node:draw_dynamic(ass)
+      if self.volume.bounds then self.volume:draw(ass, self.volume.bounds) end
+      if self.time.bounds then self.time:draw(ass, self.time.bounds) end
     end
 
     return node
@@ -446,7 +485,7 @@ function controls.new(services)
       return apply_modifier_size(self.modifier, {w = 0, h = 0}, parent)
     end
     function node:draw(ass)
-      if self.suppressed then return end
+      if self.suppressed and not tooltip_state.allow_when_suppressed then return end
       local visual = tooltip_state.visual
       local opacity = tooltip_state.opacity.value
       if visual and opacity > 0 then

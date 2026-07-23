@@ -3,7 +3,8 @@ local seekbar_renderer = {}
 function seekbar_renderer.new(deps)
   local runtime, opts = deps.runtime, deps.opts
   local dp, clamp, mouse_in = deps.dp, deps.clamp, deps.mouse_in
-  local draw_rect, draw_box = deps.draw_rect, deps.draw_box
+  local draw_rect, draw_box, draw_boxes =
+    deps.draw_rect, deps.draw_box, deps.draw_boxes
   local seek_pos_from_mouse = deps.seek_pos_from_mouse
   local draw_thumbnail_preview = deps.draw_thumbnail_preview
   local enqueue_effect, thumbnail_service = deps.enqueue_effect, deps.thumbnail_service
@@ -45,42 +46,53 @@ function seekbar_renderer.new(deps)
     end
     table.sort(track_gaps, function(a, b) return a.x1 < b.x1 end)
   
-    local function draw_track_segment(from_x, to_x, color, alpha)
+    local function track_segments(from_x, to_x)
+      local segments = {}
       from_x = clamp(from_x, x1, x2)
       to_x = clamp(to_x, x1, x2)
-      if to_x <= from_x then return end
+      if to_x <= from_x then return segments end
       local cursor = from_x
       for _, gap in ipairs(track_gaps) do
         if gap.x2 > cursor and gap.x1 < to_x then
           if gap.x1 > cursor then
-            draw_rect(ass, cursor, seek_y, math.min(gap.x1, to_x),
-              seek_y + seek_h, color, alpha)
+            segments[#segments + 1] = {
+              x1 = cursor, y1 = seek_y, x2 = math.min(gap.x1, to_x),
+              y2 = seek_y + seek_h, radius = seek_h / 2
+            }
           end
           cursor = math.max(cursor, gap.x2)
           if cursor >= to_x then break end
         end
       end
       if cursor < to_x then
-        draw_rect(ass, cursor, seek_y, to_x, seek_y + seek_h, color, alpha)
+        segments[#segments + 1] = {
+          x1 = cursor, y1 = seek_y, x2 = to_x,
+          y2 = seek_y + seek_h, radius = seek_h / 2
+        }
       end
+      return segments
     end
-  
-    draw_track_segment(x1, x2, "#282828", "99")
+
+    draw_boxes(ass, track_segments(x1, x2), "#282828", "99")
   
     if runtime.snapshot.network then
       local cache_state = runtime.snapshot.cache_state or {}
       local ranges = cache_state["seekable-ranges"] or {}
+      local cache_segments = {}
       for _, range in ipairs(ranges) do
         local range_start = clamp((range["start"] or 0) / duration, 0, 1)
         local range_end = clamp((range["end"] or 0) / duration, 0, 1)
         if range_end > range_start then
-          draw_track_segment(x1 + seek_w * range_start,
-                     x1 + seek_w * range_end, "#b1b1b1", "66")
+          for _, segment in ipairs(track_segments(
+              x1 + seek_w * range_start, x1 + seek_w * range_end)) do
+            cache_segments[#cache_segments + 1] = segment
+          end
         end
       end
+      draw_boxes(ass, cache_segments, "#b1b1b1", "66")
     end
   
-    draw_track_segment(x1, handle_x, opts.accent_color, "00")
+    draw_boxes(ass, track_segments(x1, handle_x), opts.accent_color, "00")
 
     local loop_a = tonumber(runtime.snapshot.ab_loop_a)
     local loop_b = tonumber(runtime.snapshot.ab_loop_b)

@@ -8,12 +8,38 @@ function snapshot.reader(deps)
     "snapshot.reader requires friendly_quality_label")
   local max_volume_percentage = deps.max_volume_percentage
   local is_buffering = deps.is_buffering
+  local properties = deps.properties
+
+  local function property(name, default)
+    if properties then
+      local value = properties[name]
+      return value == nil and default or value
+    end
+    return mp.get_property(name, default)
+  end
+
+  local function property_number(name, default)
+    if properties then
+      local value = tonumber(properties[name])
+      return value == nil and default or value
+    end
+    return mp.get_property_number(name, default)
+  end
+
+  local function property_native(name, default)
+    if properties then
+      local value = properties[name]
+      return value == nil and default or value
+    end
+    local value = mp.get_property_native(name)
+    return value == nil and default or value
+  end
 
   return function()
-    local duration = mp.get_property_number("duration", 0) or 0
-    local position = mp.get_property_number("time-pos", 0) or 0
-    local chapters = mp.get_property_native("chapter-list") or {}
-    local chapter_index = mp.get_property_number("chapter", -1) or -1
+    local duration = property_number("duration", 0) or 0
+    local position = property_number("time-pos", 0) or 0
+    local chapters = property_native("chapter-list", {}) or {}
+    local chapter_index = property_number("chapter", -1) or -1
     local displayed_time
     if runtime.time.show_remaining and duration > 0 then
       displayed_time = "-" .. format_time(math.max(0, duration - position))
@@ -27,7 +53,7 @@ function snapshot.reader(deps)
       chapter_name = chapter.title
     end
 
-    local playlist_native = mp.get_property_native("playlist") or {}
+    local playlist_native = property_native("playlist", {}) or {}
     local playlist_items = {}
     for index, entry in ipairs(playlist_native) do
       local title = entry.title
@@ -43,32 +69,32 @@ function snapshot.reader(deps)
         playing = entry.playing == true
       }
     end
-    local playlist_pos = mp.get_property_number("playlist-pos", -1) or -1
-    local loop_playlist = mp.get_property("loop-playlist", "no") or "no"
-    local loop_file = mp.get_property("loop-file", "no") or "no"
-    local ab_loop_a = mp.get_property_number("ab-loop-a")
-    local ab_loop_b = mp.get_property_number("ab-loop-b")
+    local playlist_pos = property_number("playlist-pos", -1) or -1
+    local loop_playlist = property("loop-playlist", "no") or "no"
+    local loop_file = property("loop-file", "no") or "no"
+    local ab_loop_a = property_number("ab-loop-a")
+    local ab_loop_b = property_number("ab-loop-b")
     local function loop_enabled(value)
       return value ~= "no" and value ~= "0"
     end
     local playlist_loop_mode = loop_enabled(loop_file) and "one" or
       (loop_enabled(loop_playlist) and "all" or "off")
     if not runtime.playlist.shuffle_initialized then
-      runtime.playlist.shuffled = mp.get_property_native("shuffle") == true
+      runtime.playlist.shuffled = property_native("shuffle") == true
       runtime.playlist.shuffle_initialized = true
     end
 
-    local video_id = mp.get_property_number("vid", 0) or 0
+    local video_id = property_number("vid", 0) or 0
     local video_items = {}
     local image_items = {}
     local video_stream_index = 0
-    local subtitle_id = mp.get_property_number("sid", 0) or 0
-    local secondary_subtitle_id = mp.get_property_number("secondary-sid", 0) or 0
+    local subtitle_id = property_number("sid", 0) or 0
+    local secondary_subtitle_id = property_number("secondary-sid", 0) or 0
     local subtitle_items = {{id = 0, label = "Off", language = nil}}
-    local audio_id = mp.get_property_number("aid", 0) or 0
+    local audio_id = property_number("aid", 0) or 0
     local audio_items = {{id = 0, label = "Off", language = nil}}
     local shader_items = {}
-    local shaders = mp.get_property_native("glsl-shaders") or {}
+    local shaders = property_native("glsl-shaders", {}) or {}
     if type(shaders) == "table" then
       for _, path in ipairs(shaders) do
         path = tostring(path)
@@ -114,7 +140,7 @@ function snapshot.reader(deps)
       end
       return table.concat(details, " · ")
     end
-    for _, track in ipairs(mp.get_property_native("track-list") or {}) do
+    for _, track in ipairs(property_native("track-list", {}) or {}) do
       if track.type == "video" then
         local label = track.title
         if type(label) ~= "string" or label:match("^%s*$") then
@@ -180,25 +206,32 @@ function snapshot.reader(deps)
           end
         end
       end
-      local params = mp.get_property_native("video-out-params") or {}
+      local params = property_native("video-out-params", {}) or {}
       local current_height = tonumber(params.h)
-      local current_fps = mp.get_property_number("container-fps") or
-        mp.get_property_number("estimated-vf-fps")
+      local current_fps = property_number("container-fps") or
+        property_number("estimated-vf-fps")
       local rounded_fps = current_fps and math.floor(current_fps + 0.5) or 0
-      video_id = runtime.ytdl.selected_id
-      if not video_id then
-        for _, item in ipairs(video_items) do
-          if item.height == current_height and
-            (rounded_fps == 0 or (tonumber(item.fps) or 0) == 0 or
-              item.fps == rounded_fps) then
-            video_id = item.id
-            break
+      if video_id > 0 then
+        video_id = runtime.ytdl.selected_id
+        if not video_id then
+          for _, item in ipairs(video_items) do
+            if item.height == current_height and
+              (rounded_fps == 0 or (tonumber(item.fps) or 0) == 0 or
+                item.fps == rounded_fps) then
+              video_id = item.id
+              break
+            end
           end
         end
       end
     end
 
     local video_track_count = #video_items
+    local selectable_video_items = {{id = 0, label = "Off", language = nil}}
+    for _, item in ipairs(video_items) do
+      selectable_video_items[#selectable_video_items + 1] = item
+    end
+    video_items = selectable_video_items
     if #image_items > 0 then
       video_items[#video_items + 1] = {separator = true, label = "Images"}
       for _, item in ipairs(image_items) do
@@ -209,32 +242,32 @@ function snapshot.reader(deps)
     return {
       duration = duration,
       position = position,
-      paused = mp.get_property_native("pause") == true,
-      muted = mp.get_property_native("mute") == true,
-      fullscreen = mp.get_property_native("fullscreen") == true,
-      window_border = mp.get_property_native("border") ~= false,
-      window_maximized = mp.get_property_native("window-maximized") == true,
-      volume = mp.get_property_number("volume", 0) or 0,
-      speed = mp.get_property_number("speed", 1) or 1,
-      sub_visibility = mp.get_property_native("sub-visibility") ~= false,
-      subtitle_text = mp.get_property("sub-text", "") or "",
+      paused = property_native("pause") == true,
+      muted = property_native("mute") == true,
+      fullscreen = property_native("fullscreen") == true,
+      window_border = property_native("border") ~= false,
+      window_maximized = property_native("window-maximized") == true,
+      volume = property_number("volume", 0) or 0,
+      speed = property_number("speed", 1) or 1,
+      sub_visibility = property_native("sub-visibility") ~= false,
+      subtitle_text = property("sub-text", "") or "",
       secondary_sub_visibility =
-        mp.get_property_native("secondary-sub-visibility") ~= false,
-      subtitle_delay = mp.get_property_number("sub-delay", 0) or 0,
-      subtitle_font_size = mp.get_property_number("sub-font-size", 38) or 38,
-      subtitle_border_size = mp.get_property_number("sub-border-size", 1.65) or 1.65,
-      subtitle_color = mp.get_property("sub-color", "#FFFFFFFF") or "#FFFFFFFF",
-      subtitle_font = mp.get_property("sub-font", "sans-serif") or "sans-serif",
-      video_crop = mp.get_property("video-crop", "") or "",
-      video_keepaspect = mp.get_property_native("keepaspect") ~= false,
-      video_panscan = mp.get_property_number("panscan", 0) or 0,
-      video_gamma = mp.get_property_number("gamma", 0) or 0,
-      video_brightness = mp.get_property_number("brightness", 0) or 0,
-      video_saturation = mp.get_property_number("saturation", 0) or 0,
-      video_rotation = mp.get_property_number("video-rotate", 0) or 0,
+        property_native("secondary-sub-visibility") ~= false,
+      subtitle_delay = property_number("sub-delay", 0) or 0,
+      subtitle_font_size = property_number("sub-font-size", 38) or 38,
+      subtitle_border_size = property_number("sub-border-size", 1.65) or 1.65,
+      subtitle_color = property("sub-color", "#FFFFFFFF") or "#FFFFFFFF",
+      subtitle_font = property("sub-font", "sans-serif") or "sans-serif",
+      video_crop = property("video-crop", "") or "",
+      video_keepaspect = property_native("keepaspect") ~= false,
+      video_panscan = property_number("panscan", 0) or 0,
+      video_gamma = property_number("gamma", 0) or 0,
+      video_brightness = property_number("brightness", 0) or 0,
+      video_saturation = property_number("saturation", 0) or 0,
+      video_rotation = property_number("video-rotate", 0) or 0,
       shader_items = shader_items,
       max_volume_percentage = math.max(100,
-        mp.get_property_number("volume-max", max_volume_percentage) or
+        property_number("volume-max", max_volume_percentage) or
           max_volume_percentage),
       chapter_index = chapter_index,
       chapters = chapters,
@@ -246,10 +279,10 @@ function snapshot.reader(deps)
       chapter_name = chapter_name,
       time_text = displayed_time .. " / " .. format_time(duration),
       buffering = is_buffering(),
-      network = mp.get_property_native("demuxer-via-network") == true,
-      cache_state = mp.get_property_native("demuxer-cache-state") or {},
+      network = property_native("demuxer-via-network") == true,
+      cache_state = property_native("demuxer-cache-state", {}) or {},
       video_id = video_id,
-      video_present = (mp.get_property_number("vid", 0) or 0) > 0,
+      video_present = (property_number("vid", 0) or 0) > 0,
       video_items = video_items,
       video_track_count = video_track_count,
       playlist_items = playlist_items,
@@ -260,11 +293,77 @@ function snapshot.reader(deps)
       ab_loop_a = ab_loop_a,
       ab_loop_b = ab_loop_b,
       playlist_shuffled = runtime.playlist.shuffled == true,
-      media_title = mp.get_property("media-title", "") or ""
+      media_title = property("media-title", "") or ""
     }
   end
+end
 
+function snapshot.cached_reader(deps)
+  local read_full = snapshot.reader(deps)
+  local current = nil
+  local invalidated = true
+  local position = nil
+  local duration = nil
+  local cache_state = nil
+  local subtitle_text = nil
+  local revision = 0
+  local service = {}
 
+  local function refresh_time_text(value)
+    local duration = value.duration or 0
+    local playback_position = value.position or 0
+    local displayed_time
+    if deps.runtime.time.show_remaining and duration > 0 then
+      displayed_time = "-" ..
+        deps.format_time(math.max(0, duration - playback_position))
+    else
+      displayed_time = deps.format_time(playback_position)
+    end
+    value.time_text = displayed_time .. " / " .. deps.format_time(duration)
+  end
+
+  function service:invalidate()
+    invalidated = true
+  end
+
+  function service:update(name, value)
+    if name == "time-pos" then
+      position = tonumber(value) or 0
+      if current then
+        current.position = position
+        refresh_time_text(current)
+      end
+    elseif name == "duration" then
+      duration = tonumber(value) or 0
+      if current then
+        current.duration = duration
+        refresh_time_text(current)
+      end
+    elseif name == "demuxer-cache-state" then
+      cache_state = value or {}
+      if current then current.cache_state = cache_state end
+    elseif name == "sub-text" then
+      subtitle_text = value or ""
+      if current then current.subtitle_text = subtitle_text end
+    end
+  end
+
+  function service:read()
+    if invalidated or not current then
+      current = read_full()
+      invalidated = false
+      revision = revision + 1
+      current._revision = revision
+    end
+    if position ~= nil then current.position = position end
+    if duration ~= nil then current.duration = duration end
+    if cache_state ~= nil then current.cache_state = cache_state end
+    if subtitle_text ~= nil then current.subtitle_text = subtitle_text end
+    refresh_time_text(current)
+    return current
+  end
+
+  return service
 end
 
 return snapshot

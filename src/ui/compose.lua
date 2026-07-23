@@ -24,6 +24,18 @@ function compose.new(deps)
   local default_text_font = deps.default_text_font
   local icon_text_size = deps.icon_text_size
   local normal_text_size = deps.normal_text_size
+  local render_pass, default_render_pass = "base", "base"
+  local register_interactions = true
+
+  local function set_render_pass(pass, default_pass, should_register)
+    render_pass = pass or "base"
+    default_render_pass = default_pass or render_pass
+    register_interactions = should_register ~= false
+  end
+
+  local function is_render_pass(pass)
+    return (pass or default_render_pass) == render_pass
+  end
 
   local function Rect(args)
     return {
@@ -221,6 +233,7 @@ function compose.new(deps)
   end
 
   local function draw_modifier_background(ass, bounds, modifier)
+    if not is_render_pass(modifier.render_pass) then return end
     if not modifier.background_color then return end
     draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2,
          shape_radius(modifier.background_shape, bounds),
@@ -231,11 +244,14 @@ function compose.new(deps)
     local pointer = modifier.pointer_name and
               interaction_bounds(bounds, modifier) or bounds
 
-    if modifier.pointer_name then
+    if register_interactions and modifier.pointer_name and
+      render_pass == (modifier.render_pass or default_render_pass) then
       pointer.name = modifier.pointer_name
       pointer.enabled = modifier.pointer_enabled
+      if not runtime.input.hitboxes[modifier.pointer_name] then
+        runtime.input.order[#runtime.input.order + 1] = modifier.pointer_name
+      end
       runtime.input.hitboxes[modifier.pointer_name] = pointer
-      runtime.input.order[#runtime.input.order + 1] = modifier.pointer_name
       pointer.on_click = modifier.pointer_action
       pointer.on_press = modifier.pointer_press_action
       pointer.on_release = modifier.pointer_release_action
@@ -245,7 +261,9 @@ function compose.new(deps)
       pointer.on_scroll_down = modifier.pointer_scroll_down_action
     end
 
-    if modifier.hover_indication and modifier.pointer_enabled ~= false and
+    local draws_hover = render_pass == "interaction" or render_pass == "modal"
+    if draws_hover and modifier.hover_indication and
+      modifier.pointer_enabled ~= false and
       mouse_in(pointer) then
       local inset = modifier.hover_inset or 0
       draw_box(ass, bounds.x + inset, bounds.y + inset, bounds.x2 - inset,
@@ -274,6 +292,7 @@ function compose.new(deps)
       size = args.size or icon_text_size,
       icon_size = args.icon_size or args.size or icon_text_size,
       alpha = args.alpha,
+      render_pass = args.render_pass,
       enabled = args.enabled ~= false,
       on_click = args.on_click,
       on_scroll_up = args.on_scroll_up,
@@ -317,28 +336,30 @@ function compose.new(deps)
     end
 
     function node:draw(ass, bounds)
-      local icon_alpha = self.alpha
-      if not self.enabled then
-        local transition_alpha = tonumber(icon_alpha or "00", 16) or 0
-        icon_alpha = string.format("%02X",
-          math.floor(255 - (255 - transition_alpha) * 0.4 + 0.5))
-      end
-      local center_x, center_y = bounds.x + bounds.w / 2, bounds.y + bounds.h / 2
-      if self.transition_icon then
-        local progress = math.max(0, math.min(1, self.transition_progress or 0))
-        local opacity = 1 - (tonumber(icon_alpha or "00", 16) or 0) / 255
-        local function faded_alpha(fraction)
-          return string.format("%02X",
-            math.floor(255 - 255 * opacity * fraction + 0.5))
+      if is_render_pass(self.render_pass) then
+        local icon_alpha = self.alpha
+        if not self.enabled then
+          local transition_alpha = tonumber(icon_alpha or "00", 16) or 0
+          icon_alpha = string.format("%02X",
+            math.floor(255 - (255 - transition_alpha) * 0.4 + 0.5))
         end
-        draw_icon(ass, center_x, center_y, self.icon, "#FFFFFF", self.icon_size,
-          faded_alpha(1 - progress))
-        draw_icon(ass, center_x, center_y, self.transition_icon, "#FFFFFF",
-          self.icon_size,
-          faded_alpha(progress))
-      else
-        draw_icon(ass, center_x, center_y, self.icon, "#FFFFFF", self.icon_size,
-          icon_alpha)
+        local center_x, center_y =
+          bounds.x + bounds.w / 2, bounds.y + bounds.h / 2
+        if self.transition_icon then
+          local progress = math.max(0, math.min(1, self.transition_progress or 0))
+          local opacity = 1 - (tonumber(icon_alpha or "00", 16) or 0) / 255
+          local function faded_alpha(fraction)
+            return string.format("%02X",
+              math.floor(255 - 255 * opacity * fraction + 0.5))
+          end
+          draw_icon(ass, center_x, center_y, self.icon, "#FFFFFF", self.icon_size,
+            faded_alpha(1 - progress))
+          draw_icon(ass, center_x, center_y, self.transition_icon, "#FFFFFF",
+            self.icon_size, faded_alpha(progress))
+        else
+          draw_icon(ass, center_x, center_y, self.icon, "#FFFFFF", self.icon_size,
+            icon_alpha)
+        end
       end
       if self.tooltip and self.enabled and mouse_in(bounds) then
         request_tooltip(self.tooltip, bounds)
@@ -355,6 +376,7 @@ function compose.new(deps)
       color = args.color or "#FFFFFF",
       alpha = args.alpha,
       alignment = args.alignment,
+      render_pass = args.render_pass,
       modifier = args.modifier or Modifier()
     }
 
@@ -372,6 +394,8 @@ function compose.new(deps)
     end
 
     function node:draw(ass, bounds)
+      self.bounds = bounds
+      if not is_render_pass(self.render_pass) then return end
       draw_text(ass, bounds.x + bounds.w / 2, bounds.y + bounds.h / 2,
             self.text, self.size, self.color, self.alpha,
             default_text_font, self.alignment)
@@ -525,6 +549,8 @@ function compose.new(deps)
 
   return {
     Rect = Rect,
+    set_render_pass = set_render_pass,
+    is_render_pass = is_render_pass,
     RectangleShape = RectangleShape,
     RoundedCornerShape = RoundedCornerShape,
     Modifier = Modifier,

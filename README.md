@@ -30,15 +30,18 @@ material-osc can be customized with a `material-osc.conf` file in mpv's
 | `seeking_zone_percentage` | `15` | `0`–`50` | Sets each fast-seek zone's width as a percentage of the window. |
 | `seek_step_seconds` | `5` | Seconds; minimum `1` | Sets how far edge clicks and edge scrolling seek backward or forward. |
 | `show_mini_seekbar` | `no` | `yes`, `no` | Keeps a 1dp playback-progress line at the bottom while the main controls are hidden. |
-| `force_window_controls` | `no` | `yes`, `no` | Shows material-osc window controls even when mpv has native window decorations. |
+| `window_controls` | `auto` | `auto`, `yes`, `no` | Shows window controls automatically for borderless and fullscreen windows, always, or never. |
+| `youtube_quality` | `auto` | `auto` or a vertical resolution such as `1080` | Sets the maximum quality used when initially loading YouTube videos. `auto` preserves mpv's configured `ytdl-format`. |
+| `force_hwdec` | `yes` | `yes`, `no` | Enables mpv's safe automatic hardware decoding. With `no`, material-osc preserves the configured `hwdec` value. |
 | `max_volume_percentage` | `150` | Percentage; minimum `100` | Sets mpv's upper volume limit and the OSC volume range. |
 | `directory_playlist` | `yes` | `yes`, `no` | Adds nearby video and audio files when opening a local file, unless a multi-item playlist already exists. |
 | `directory_playlist_sort` | `name` | `name`, `newest`, `oldest` | Selects how automatically discovered directory entries are ordered. |
 
 ### Window controls
 
-When mpv runs without native window decorations (`border=no` in `mpv.conf`) or enters
-fullscreen, material-osc automatically provides minimize, maximize/restore, and close buttons.
+With `window_controls=auto`, material-osc provides minimize, maximize/restore, and
+close buttons when mpv runs without native window decorations (`border=no` in
+`mpv.conf`) or enters fullscreen.
 
 ## Recommended mpv configuration
 

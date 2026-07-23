@@ -40,10 +40,17 @@ function animation.spring(args)
   function value:update(now)
     local dt = clamp(now - self.last_update, 0, 1 / 30)
     self.last_update = now
-    local acceleration = self.stiffness * (self.target - self.value) -
-      self.damping * self.velocity
-    self.velocity = self.velocity + acceleration * dt
-    self.value = self.value + self.velocity * dt
+    -- Keep spring response independent from the overlay refresh rate. A
+    -- single 60 Hz Euler step adds enough numerical damping to erase the
+    -- overshoot that was visible when mpv drove the OSC at 120/240 Hz.
+    local steps = math.max(1, math.ceil(dt * 240))
+    local step = dt / steps
+    for _ = 1, steps do
+      local acceleration = self.stiffness * (self.target - self.value) -
+        self.damping * self.velocity
+      self.velocity = self.velocity + acceleration * step
+      self.value = self.value + self.velocity * step
+    end
 
     if math.abs(self.target - self.value) < self.epsilon and
       math.abs(self.velocity) < self.velocity_epsilon then

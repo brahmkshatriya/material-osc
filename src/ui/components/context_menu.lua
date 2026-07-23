@@ -100,7 +100,7 @@ function context_menu.new(services)
     end
   end
 
-  function node:update(snapshot)
+  function node:update(snapshot, refresh_items)
     if not state.open and state.pending_x ~= nil and
       not state.animation:is_running() and state.animation.value <= 0.001 then
       state.width_animation:snap(dp(28))
@@ -111,7 +111,27 @@ function context_menu.new(services)
       state.open = true
       state.animation:set_target(1, nil, 0.12)
     end
-    self.items = actions:items(snapshot)
+    if refresh_items ~= false or #self.items == 0 then
+      self.items = actions:items(snapshot)
+      self.panel_w = math.max(dp(220),
+        math.min(dp(330), services.state.viewport.w - dp(16)))
+      local rows, separators = 0, 0
+      for _, item in ipairs(self.items) do
+        if item.separator then separators = separators + 1
+        else rows = rows + 1 end
+      end
+      local available_h = math.max(dp(32), services.state.viewport.h - dp(16))
+      local gaps = math.max(0, #self.items - 1)
+      self.row_h = math.min(dp(42), math.max(dp(32),
+        (available_h - self.panel_padding * 2 -
+          separators * self.separator_h - gaps * self.row_gap) /
+          math.max(1, rows)))
+      for _, row in ipairs(self.rows) do
+        row.modifier.fixed_height = self.row_h
+      end
+      self.panel_h = self.panel_padding * 2 + rows * self.row_h +
+        separators * self.separator_h + gaps * self.row_gap
+    end
     self.morph = clamp(state.animation.value, 0, 1)
     local content_progress = clamp((self.morph - 0.62) / 0.38, 0, 1)
     content_progress = content_progress * content_progress *
@@ -120,21 +140,6 @@ function context_menu.new(services)
     self.interactive = state.open and self.morph > 0.9
     self.backdrop.modifier.pointer_enabled = state.open
     self.panel.modifier.pointer_enabled = self.interactive
-    self.panel_w = math.max(dp(220),
-      math.min(dp(330), services.state.viewport.w - dp(16)))
-    local rows, separators = 0, 0
-    for _, item in ipairs(self.items) do
-      if item.separator then separators = separators + 1 else rows = rows + 1 end
-    end
-    local available_h = math.max(dp(32), services.state.viewport.h - dp(16))
-    local gaps = math.max(0, #self.items - 1)
-    self.row_h = math.min(dp(42), math.max(dp(32),
-      (available_h - self.panel_padding * 2 -
-        separators * self.separator_h - gaps * self.row_gap) /
-        math.max(1, rows)))
-    for _, row in ipairs(self.rows) do row.modifier.fixed_height = self.row_h end
-    self.panel_h = self.panel_padding * 2 + rows * self.row_h +
-      separators * self.separator_h + gaps * self.row_gap
     state.width_animation:set_target(state.open and self.panel_w or dp(28))
     state.height_animation:set_target(state.open and self.panel_h or dp(28))
     for _, row in ipairs(self.rows) do

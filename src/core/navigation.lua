@@ -140,6 +140,7 @@ function navigation.new(args)
     local state = runtime.settings
     state.page, state.pending_page, state.transition_phase = "root", nil, nil
     state.resize_started = false
+    state.fade:snap(0)
     state.content_animation:snap(1)
     state.width_animation:snap(args.dp(320))
     state.height_animation:snap(args.dp(292))

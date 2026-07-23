@@ -11,9 +11,11 @@ function playlist.new(services)
   local Modifier, Rect = ui.Modifier, ui.Rect
   local apply_modifier_size, measure_node = ui.apply_modifier_size, ui.measure_node
   local draw_node = ui.draw_node
+  local push_clip, pop_clip = ui.push_clip, ui.pop_clip
   local mouse_in, render = ui.mouse_in, services.effects.render
   local default_text_font = ui.default_text_font
   local truncate_to_width = ui.truncate_to_width
+  local is_render_pass = ui.is_render_pass
   local set_open = services.navigation.set_playlist_open
 
   local function move_target_from_pointer()
@@ -256,16 +258,24 @@ function playlist.new(services)
       playlist_state.list_bounds = list_bounds
       playlist_state.scroll_index = clamp(playlist_state.scroll_index, 0,
         math.max(0, #items - visible))
+      -- The row count is based on the final panel height so it stays stable
+      -- throughout the spring. Clip that fixed layout to the live list
+      -- viewport so rows cannot pass through the footer while morphing.
+      push_clip(list_area)
       for slot, row in ipairs(self.rows) do
         local index = playlist_state.scroll_index + slot
+        local row_bounds = Rect({x = list_bounds.x,
+          y = list_bounds.y + (slot - 1) * row_h,
+          w = list_bounds.w, h = row_h})
+        local row_fully_visible = row_bounds.y >= list_bounds.y and
+          row_bounds.y2 <= list_bounds.y2
         row:update({item = slot <= visible and items[index] or nil, index = index,
-          interactive = self.interactive, text_alpha = text_alpha,
+          interactive = self.interactive and row_fully_visible,
+          text_alpha = text_alpha,
           secondary_alpha = secondary_alpha, hover_alpha = hover_alpha,
           selected_alpha = selected_alpha})
         if slot <= visible and row.item then
-          draw_node(row, ass, Rect({x = list_bounds.x,
-            y = list_bounds.y + (slot - 1) * row_h,
-            w = list_bounds.w, h = row_h}))
+          draw_node(row, ass, row_bounds)
         end
       end
       if playlist_state.drag_to then
@@ -282,6 +292,7 @@ function playlist.new(services)
         draw_node(node.scrollbar, ass, Rect({x = list_area.x2 - scrollbar_w,
           y = list_area.y, w = scrollbar_w, h = list_area.h}))
       end
+      pop_clip()
 
       local footer = Rect({x = bounds.x, y = bounds.y2 - footer_h,
         w = bounds.w, h = footer_h})
@@ -364,10 +375,19 @@ function playlist.new(services)
       local item_count = snapshot.playlist_count or 0
       local visible_rows = math.min(math.max(1, item_count), maximum_rows)
       self.panel_height = panel_chrome + visible_rows * row_h
-      playlist_state.width_animation:set_target(
-        playlist_state.open and self.panel_width or dp(118))
-      playlist_state.height_animation:set_target(
-        playlist_state.open and self.panel_height or dp(42))
+      local target_width =
+        playlist_state.open and self.panel_width or dp(118)
+      local target_height =
+        playlist_state.open and self.panel_height or dp(42)
+      if playlist_state.open or playlist_state.animation:is_running() then
+        playlist_state.width_animation:set_target(target_width)
+        playlist_state.height_animation:set_target(target_height)
+      else
+        -- Hidden geometry is not visible, so settling two springs here only
+        -- burns frames during startup and after the close animation.
+        playlist_state.width_animation:snap(target_width)
+        playlist_state.height_animation:snap(target_height)
+      end
 
       local count, position = snapshot.playlist_count or 0, snapshot.playlist_pos or -1
       local wraps = snapshot.playlist_looping == true
@@ -388,8 +408,12 @@ function playlist.new(services)
       self.playlist.modifier.pointer_enabled = true
       self.previous.modifier.pointer_enabled = self.previous.enabled
       self.next.modifier.pointer_enabled = self.next.enabled
-      self.content:update(snapshot, self.content_opacity, self.interactive,
-        visible_rows)
+      if morphing or self.morph > 0 then
+        self.content:update(snapshot, self.content_opacity, self.interactive,
+          visible_rows)
+      else
+        self.content.modifier.pointer_enabled = false
+      end
     end
     function node:measure(parent)
       return apply_modifier_size(self.modifier, {w = 0, h = dp(44)}, parent)
@@ -410,15 +434,23 @@ function playlist.new(services)
       local from_y, to_y = source.y + dp(4), target.y2 - dp(38)
       local y = from_y + (to_y - from_y) * progress
       for index, button in ipairs({node.playlist, node.previous, node.next}) do
-        local from_x = source.x + dp(4) + (index - 1) * dp(38)
-        local to_x = target.x + dp(5) + (index - 1) * dp(38)
-        local x = from_x + (to_x - from_x) * progress
+        -- The pill and expanded footer share the same controls. Keep their
+        -- horizontal centers fixed so opening only lifts them vertically.
+        local x = source.x + dp(4) + (index - 1) * dp(38)
         draw_node(button, ass, Rect({x = x, y = y, w = button_w, h = button_h}))
       end
     end
 
     function node:draw(ass, bounds)
       local _, _, source = control_metrics(bounds)
+      if is_render_pass("interaction") then
+        if self.morph == 0 and not playlist_state.open and
+          not playlist_state.animation:is_running() then
+          draw_control_buttons(ass, source, source, 0)
+        end
+        return
+      end
+      if not is_render_pass("base") then return end
       playlist_state.anchor_bounds = source
       if self.morph == 0 and not playlist_state.open and
         not playlist_state.animation:is_running() then
@@ -465,12 +497,17 @@ function playlist.new(services)
         h = playlist_state.height_animation.value
       })
       playlist_state.bounds = surface
-      local shell_opacity = 0.53 + self.morph * 0.43
+      -- The playlist morphs back into a persistent pill, unlike the context
+      -- menu which closes into empty space. Preserve the pill's base opacity
+      -- throughout the handoff so it never dims and then pops back in.
+      local shell_opacity = 0.53 + self.morph * 0.39
       local top_radius = dp(21) + dp(9) * control_progress
       local bottom_radius = dp(21)
       draw_round_box(ass, surface.x, surface.y, surface.x2, surface.y2,
         top_radius, bottom_radius, "#050708", alpha(shell_opacity))
+      push_clip(surface)
       draw_node(self.content, ass, surface)
+      pop_clip()
       draw_control_buttons(ass, source, target, control_progress)
     end
     return node

@@ -17,6 +17,7 @@ function animation_coordinator.new(args)
     runtime.subtitle.animation,
     runtime.audio.animation,
     runtime.settings.animation,
+    runtime.settings.fade,
     runtime.settings.content_animation,
     runtime.settings.width_animation,
     runtime.settings.height_animation,
@@ -37,6 +38,59 @@ function animation_coordinator.new(args)
       if value:is_running() then return true end
     end
     return false
+  end
+
+  function service:recommended_interval(base)
+    if runtime.volume.animation:is_running() or
+      runtime.context_menu.animation:is_running() or
+      runtime.context_menu.width_animation:is_running() or
+      runtime.context_menu.height_animation:is_running() or
+      runtime.playlist.animation:is_running() or
+      runtime.playlist.width_animation:is_running() or
+      runtime.playlist.height_animation:is_running() or
+      runtime.chapter.animation:is_running() or
+      runtime.subtitle.animation:is_running() or
+      runtime.audio.animation:is_running() or
+      runtime.settings.animation:is_running() or
+      runtime.settings.fade:is_running() or
+      runtime.settings.width_animation:is_running() or
+      runtime.settings.height_animation:is_running() then
+      return base
+    end
+    -- Controller fades touch three retained layers, so 45 Hz is a better
+    -- quality/cost point than driving all of them at a 60+ Hz display rate.
+    if runtime.controller.opacity:is_running() then
+      return math.max(base, 1 / 45)
+    end
+    for _, value in ipairs(animations) do
+      if value:is_running() then
+        if value.running or math.abs(value.target - value.value) > 0.015 or
+          math.abs(value.velocity or 0) > 0.35 then
+          return base
+        end
+      end
+    end
+    return math.max(base, 1 / 30)
+  end
+
+  function service:render_mode()
+    if runtime.controller.opacity:is_running() then return "visual" end
+    if runtime.volume.animation:is_running() and
+      not (runtime.context_menu.animation:is_running() or
+        runtime.playlist.animation:is_running() or
+        runtime.chapter.animation:is_running() or
+        runtime.subtitle.animation:is_running() or
+        runtime.audio.animation:is_running() or
+        runtime.settings.animation:is_running() or
+        runtime.settings.fade:is_running() or
+        runtime.playback_indicator.opacity:is_running() or
+        runtime.playback_indicator.scale:is_running() or
+        runtime.edge_seek.left.opacity:is_running() or
+        runtime.edge_seek.right.opacity:is_running() or
+        runtime.tooltip.opacity:is_running()) then
+      return "dynamic"
+    end
+    return "interaction"
   end
 
   function service:edge_targets()
@@ -100,13 +154,24 @@ function animation_coordinator.new(args)
     runtime.context_menu.width_animation:update(now)
     runtime.context_menu.height_animation:update(now)
 
-    for _, name in ipairs({"playlist", "chapter", "subtitle", "audio", "settings"}) do
+    runtime.playlist.animation:set_target(
+      runtime.playlist.open and 1 or 0, now,
+      runtime.playlist.open and 0.12 or 0.18)
+    runtime.playlist.animation:update(now)
+
+    for _, name in ipairs({"chapter", "subtitle", "audio", "settings"}) do
       local state = runtime[name]
       state.animation:set_target(state.open and 1 or 0)
       state.animation:update(now)
     end
-    runtime.chapter.fade:set_target(runtime.chapter.open and 1 or 0)
+    runtime.chapter.fade:set_target(
+      runtime.chapter.open and 1 or 0, now,
+      runtime.chapter.open and 0.12 or 0.18)
     runtime.chapter.fade:update(now)
+    runtime.settings.fade:set_target(
+      runtime.settings.open and 1 or 0, now,
+      runtime.settings.open and 0.12 or 0.18)
+    runtime.settings.fade:update(now)
     runtime.playlist.width_animation:update(now)
     runtime.playlist.height_animation:update(now)
     runtime.settings.content_animation:update(now)

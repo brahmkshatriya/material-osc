@@ -13,6 +13,7 @@ ytdl_service.quality_label = quality_label
 
 function ytdl_service.supports(url)
   if type(url) ~= "string" then return false end
+  url = url:gsub("^ytdl://", "")
   local host = url:match("^https?://([^/%?#]+)")
   if not host then return false end
   host = host:lower():gsub(":%d+$", "")
@@ -62,13 +63,13 @@ function ytdl_service.new(args)
       start = tostring(position), pause = paused and "yes" or "no"
     }
     if not item.playback_url then
-      mp.set_property("ytdl-format", item.selector)
       load_options["ytdl-format"] = item.selector
     end
     if media_title ~= "" then load_options["force-media-title"] = media_title end
     args.runtime.loading.quality_switching = true
     args.runtime.loading.started_ms = mp.get_time() * 1000
     args.render()
+    if args.before_quality_reload then args.before_quality_reload() end
     mp.command_native({name = "loadfile", url = item.playback_url or state.url,
       flags = "replace", options = load_options})
   end
