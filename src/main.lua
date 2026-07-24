@@ -270,7 +270,7 @@ local function create_app(services)
 
     local show_window_controls = opts.window_controls == "yes" or
       (opts.window_controls == "auto" and
-        (not state.snapshot.window_border or state.snapshot.fullscreen))
+        (not state.snapshot.window_border or not state.snapshot.title_bar or state.snapshot.fullscreen))
     if show_window_controls then
       local controls_size = ui.measure_node(self.window_controls, root)
       ui.draw_node(self.window_drag_area, ass, root)

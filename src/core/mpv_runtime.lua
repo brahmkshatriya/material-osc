@@ -139,7 +139,7 @@ function mpv_runtime.new(args)
       {"chapter-list", "native"}, {"track-list", "native"}, {"sid", "number"},
       {"secondary-sid", "number"}, {"secondary-sub-visibility", "bool"},
       {"aid", "number"}, {"speed", "number"}, {"sub-visibility", "bool"},
-      {"fullscreen", "bool"}, {"border", "bool"},
+      {"fullscreen", "bool"}, {"border", "bool"}, {"title-bar", "bool"},
       {"window-maximized", "bool"}, {"seeking", "bool"},
       {"paused-for-cache", "bool"}, {"cache-buffering-state", "number"},
       {"vid", "number"},

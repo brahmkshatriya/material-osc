@@ -246,6 +246,7 @@ function snapshot.reader(deps)
       muted = property_native("mute") == true,
       fullscreen = property_native("fullscreen") == true,
       window_border = property_native("border") ~= false,
+      title_bar = property_native("title-bar") ~= false,
       window_maximized = property_native("window-maximized") == true,
       volume = property_number("volume", 0) or 0,
       speed = property_number("speed", 1) or 1,
