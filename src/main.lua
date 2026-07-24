@@ -101,6 +101,7 @@ local shader_loader_module = require "src.services.shader_loader"
 local thumbnail_module = require "src.services.thumbnail_service"
 local bookmark_service_module = require "src.services.bookmark_service"
 local context_actions_module = require "src.services.context_actions"
+local subtitle_position_module = require "src.services.subtitle_position"
 local update_service_module = require "src.services.update_service"
 
 local manual_stream_quality_reload = false
@@ -418,6 +419,7 @@ local runtime = application_state.new({
   animation = animation,
   now_ms = function() return mp.get_time() * 1000 end
 })
+local subtitle_position = subtitle_position_module.new({mp = mp})
 
 local thumbnail_service
 local draw_thumbnail_preview
@@ -854,6 +856,11 @@ local renderer = frame_runtime.renderer.new({
       draw_overlay_layer("interaction", "base", false)
       draw_overlay_layer("modal", "modal", true)
     end
+    local controller_bounds = runtime.controller.bounds
+    subtitle_position:update(
+      controller_bounds and controller_bounds.h or 0,
+      runtime.controller.opacity.value,
+      runtime.viewport.h)
   end,
   on_frame = performance and function(mode)
     if mode == "full" then
@@ -949,6 +956,7 @@ config_watcher = config_watcher_module.new({
   end
 })
 mp.register_event("shutdown", function() config_watcher:stop() end)
+mp.register_event("shutdown", function() subtitle_position:dispose() end)
 if performance then
   mp.register_event("shutdown", function()
     msg.warn(string.format(
