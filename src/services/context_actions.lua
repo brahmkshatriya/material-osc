@@ -172,7 +172,12 @@ function context_actions.new(args)
         "mpv configuration directory is unavailable", {duration = 2})
       return
     end
-    if not filesystem:ensure_directory(config_dir) then
+    local ready, reason = filesystem:ensure_directory(config_dir)
+    if not ready then
+      if args.msg then
+        args.msg.error("could not create script-opts directory: " ..
+          tostring(reason or "unknown error"))
+      end
       args.toast:error(
         "Could not create script-opts directory", {duration = 2})
       return

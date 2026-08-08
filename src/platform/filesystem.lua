@@ -74,12 +74,18 @@ function filesystem.new(args)
   function service:ensure_directory(path)
     if not path or path == "" then return false end
     local info = self:info(path)
-    if info then return info.is_dir ~= false end
+    if info then
+      if info.is_dir ~= false then return true end
+      return false, "a file already exists at that path"
+    end
     local command = runtime.is_windows and windows_command.powershell(
-      "New-Item -ItemType Directory -Force " ..
-        "-LiteralPath $argument1 | Out-Null",
+      "[System.IO.Directory]::CreateDirectory($argument1) | Out-Null",
       {path}) or {"mkdir", "-p", path}
-    return process:run(command)
+    local ok, result = process:run(command)
+    if ok then return true end
+    local reason = result and result.stderr
+    reason = reason and reason:gsub("^%s+", ""):gsub("%s+$", "") or nil
+    return false, reason ~= "" and reason or nil
   end
 
   function service:ensure_parent(path)
@@ -130,8 +136,11 @@ function filesystem.new(args)
   end
 
   function service:extract_archive(archive, directory, callback)
-    if not self:ensure_directory(directory) then
-      callback(false, {}, "could not create the temporary update directory")
+    local ready, reason = self:ensure_directory(directory)
+    if not ready then
+      callback(false, {}, reason and
+        ("could not create the temporary update directory: " .. reason) or
+        "could not create the temporary update directory")
       return
     end
     local command

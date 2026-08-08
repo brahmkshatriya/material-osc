@@ -748,7 +748,7 @@ local easter_egg_collection = easter_egg_collection_module.new({
   persistence = persistence
 })
 local context_actions = context_actions_module.new({
-  mp = mp, format_time = format_time,
+  mp = mp, msg = msg, format_time = format_time,
   bookmarks = bookmark_service, opts = opts, properties = runtime.properties,
   filesystem = filesystem, http = http,
   process = process, runtime = platform_runtime,
