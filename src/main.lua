@@ -28,6 +28,13 @@ local configured_video_sync =
 local configured_force_window =
   mp.get_property("force-window", "no") or "no"
 local configured_geometry = mp.get_property("geometry", "") or ""
+local configured_auto_window_resize =
+  mp.get_property_bool("auto-window-resize", true)
+-- a window size set in mpv.conf means the user manages the window size
+local configured_window_size = configured_geometry ~= ""
+for _, name in ipairs({"autofit", "autofit-larger", "autofit-smaller"}) do
+  if (mp.get_property(name, "") or "") ~= "" then configured_window_size = true end
+end
 local function should_force(setting, is_unconfigured)
   return setting == "yes" or (setting == "auto" and is_unconfigured)
 end
@@ -42,6 +49,9 @@ local function apply_forced_mpv_options()
   mp.set_property("geometry",
     should_force(opts.force_geometry, configured_geometry == "") and
     "x66%" or configured_geometry)
+  mp.set_property_bool("auto-window-resize",
+    not should_force(opts.force_disable_auto_resize, not configured_window_size) and
+    configured_auto_window_resize)
 end
 apply_forced_mpv_options()
 
@@ -144,7 +154,6 @@ mp.add_hook("on_load", 5, function()
 end)
 
 mp.set_property("osc", "no")
-mp.set_property_bool("auto-window-resize", false)
 
 local controls_module = require "src.ui.components.controls"
 local empty_state_module = require "src.ui.components.empty_state"
@@ -1280,7 +1289,8 @@ options_update_handler = function(changed)
     runtime_host:set_context_menu_enabled(opts.context_menu)
   end
   if changed.force_hwdec or changed.force_display_resample or
-    changed.force_force_window or changed.force_geometry then
+    changed.force_force_window or changed.force_geometry or
+    changed.force_disable_auto_resize then
     apply_forced_mpv_options()
   end
   if changed.temporary_speed then temporary_speed:update_target() end

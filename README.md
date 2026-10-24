@@ -41,10 +41,10 @@ With `window_controls=auto`, material-osc provides minimize, maximize/restore,
 and close buttons when mpv runs without native window decorations (`border=no`
 in `mpv.conf`) or enters fullscreen.
 
-The script disables automatic window resizing. Unless `geometry`/`autofit` is
-already set in `mpv.conf`, it also starts the window at 66% of the screen
-height, with width calculated from the video's aspect ratio; see
-`force_geometry` below.
+Unless `geometry`/`autofit` is already set in `mpv.conf`, the script starts the
+window at 66% of the screen height, with width calculated from the video's
+aspect ratio, and disables automatic window resizing between files; see
+`force_geometry` and `force_disable_auto_resize` below.
 
 </details>
 
@@ -91,6 +91,7 @@ dash. An empty list disables detection for that chapter type.
 | `force_display_resample` | `auto` | `auto`, `yes`, `no` | With `auto`, sets `video-sync=display-resample` unless you've already configured `video-sync` in `mpv.conf`. `yes` always sets it; `no` never does, always preserving mpv's configured value. |
 | `force_force_window` | `auto` | `auto`, `yes`, `no` | With `auto`, sets `force-window=yes` (keeping an mpv window open even before a file is loaded) unless you've already configured `force-window` in `mpv.conf`. `yes` always sets it; `no` never does. |
 | `force_geometry` | `auto` | `auto`, `yes`, `no` | With `auto`, applies material-osc's 66%-of-screen-height default window size unless you've already configured `geometry`/`autofit` in `mpv.conf`. `yes` always applies it; `no` never does. |
+| `force_disable_auto_resize` | `auto` | `auto`, `yes`, `no` | With `auto`, sets `auto-window-resize=no` (keeping the window size when the next file has a different size or aspect ratio) unless you've already configured `geometry`/`autofit` in `mpv.conf`. `yes` always sets it; `no` never does, preserving mpv's configured `auto-window-resize`. |
 
 </details>
 

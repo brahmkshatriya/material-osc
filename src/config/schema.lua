@@ -78,6 +78,8 @@ local definitions = {
     normalize = enum("auto", {"auto", "yes", "no"})},
   {name = "force_geometry", default = "auto", group = "mpv",
     normalize = enum("auto", {"auto", "yes", "no"})},
+  {name = "force_disable_auto_resize", default = "auto", group = "mpv",
+    normalize = enum("auto", {"auto", "yes", "no"})},
   {name = "directory_playlist", default = true, group = "playlist"},
   {name = "directory_playlist_sort", default = "name", group = "playlist",
     normalize = enum("name", {"name", "newest", "oldest"})},
