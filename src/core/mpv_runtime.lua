@@ -357,11 +357,31 @@ function mpv_runtime.new(args)
       "material-osc-showhide", "force")
     mp.enable_key_bindings("material-osc-showhide",
       "allow-vo-dragging+allow-hide-cursor")
+    -- Touchpads send bursts of fractional wheel events; add up their size and
+    -- act once per full wheel step, like a mouse wheel notch.
+    local wheel_steps = 0
+    local function wheel(direction)
+      return function(event)
+        if event.event == "up" then return end
+        if wheel_steps * direction < 0 then wheel_steps = 0 end
+        wheel_steps = wheel_steps + direction * (tonumber(event.scale) or 1)
+        while math.abs(wheel_steps) >= 1 - 1e-6 do
+          local step = wheel_steps > 0 and 1 or -1
+          wheel_steps = wheel_steps - step
+          controller():on_wheel(step)
+        end
+      end
+    end
+    mp.add_key_binding(nil, "material-osc-wheel-up", wheel(-1),
+      {complex = true, scalable = true})
+    mp.add_key_binding(nil, "material-osc-wheel-down", wheel(1),
+      {complex = true, scalable = true})
+    local binding = "script-binding " .. mp.get_script_name() .. "/"
     mp.set_key_bindings({
       {"mouse_move", move}, {"mouse_leave", leave},
       {"mbtn_left_dbl", function() controller():on_primary_double() end},
-      {"wheel_up", function() controller():on_wheel(-1) end},
-      {"wheel_down", function() controller():on_wheel(1) end}
+      {"wheel_up", binding .. "material-osc-wheel-up"},
+      {"wheel_down", binding .. "material-osc-wheel-down"}
     }, "material-osc-input", "force")
     mp.enable_key_bindings("material-osc-input",
       "allow-hide-cursor+allow-vo-dragging")
