@@ -231,7 +231,7 @@ function mpv_runtime.new(args)
       {"secondary-sid", "number"}, {"secondary-sub-visibility", "bool"},
       {"aid", "number"}, {"speed", "number"}, {"sub-visibility", "bool"},
       {"fullscreen", "bool"}, {"border", "bool"}, {"title-bar", "bool"},
-      {"window-maximized", "bool"}, {"seeking", "bool"},
+      {"window-maximized", "bool"}, {"ontop", "bool"}, {"seeking", "bool"},
       {"paused-for-cache", "bool"}, {"cache-buffering-state", "number"},
       {"vid", "number"},
       {"video-out-params", "native"}, {"demuxer-via-network", "bool"},

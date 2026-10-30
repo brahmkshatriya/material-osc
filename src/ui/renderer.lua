@@ -23,11 +23,26 @@ function renderer.new(args)
     return value
   end
 
-  function service:dpi_scale()
+  function service:base_scale()
     if opts.dpi_scale ~= "auto" then
       return self:clamp(tonumber(opts.dpi_scale) or 1, 0.5, 4)
     end
     return self:clamp(runtime.viewport.dpi or 1, 0.5, 4)
+  end
+
+  -- Window-height factor (vidscale), quantized so the layout
+  -- is only rebuilt on real changes. shrink only scales down (small/PiP windows).
+  function service:window_scale()
+    if opts.vidscale == "no" then return 1 end
+    local reference = (tonumber(opts.vidscale_reference) or 720) * self:base_scale()
+    local factor = (runtime.viewport.h or reference) / reference
+    if opts.vidscale ~= "yes" then factor = math.min(1, factor) end
+    factor = math.max(tonumber(opts.vidscale_min) or 0.35, factor)
+    return math.floor(factor * 20 + 0.5) / 20
+  end
+
+  function service:dpi_scale()
+    return self:base_scale() * (runtime.viewport.ui_scale or 1)
   end
 
   function service:dp(value) return value * self:dpi_scale() end

@@ -645,6 +645,26 @@ function controls.new(services)
     node.play = IconButton({name = "play-button", icon = "pause", tooltip = "Pause",
       shortcut = "pause",
       on_click = function() mp.commandv("cycle", "pause") end})
+    -- with prev_next_beside_play, previous/next sit beside play/pause
+    -- instead of in the playlist pill
+    local function step_playlist(direction)
+      local snapshot = get_snapshot()
+      local count = snapshot.playlist_count or 0
+      local position = snapshot.playlist_pos or -1
+      if snapshot.playlist_looping and direction < 0 and position <= 0 then
+        mp.commandv("playlist-play-index", count - 1)
+      elseif snapshot.playlist_looping and direction > 0 and position >= count - 1 then
+        mp.commandv("playlist-play-index", 0)
+      else
+        mp.commandv(direction < 0 and "playlist-prev" or "playlist-next", "weak")
+      end
+    end
+    node.previous = IconButton({name = "playlist-previous", icon = "skip_previous",
+      tooltip = "Previous", shortcut = "playlist-prev",
+      on_click = function() step_playlist(-1) end})
+    node.next = IconButton({name = "playlist-next", icon = "skip_next",
+      tooltip = "Next", shortcut = "playlist-next",
+      on_click = function() step_playlist(1) end})
     node.volume = VolumeControl()
     node.time = TextItem({
       text = "0:00 / 0:00",
@@ -783,15 +803,17 @@ function controls.new(services)
       secondary = node.cached
     })
 
+    local starting = {Pill({children = {node.play}})}
+    if config.opts.prev_next_beside_play then
+      starting[#starting + 1] = Pill({children = {node.previous, node.next}})
+    end
+    starting[#starting + 1] = Pill({no_background = true, children = {node.volume}})
+    starting[#starting + 1] = node.time_cache
+    starting[#starting + 1] = node.chapter
     node.starting = Row({
       gap = dp(8),
       modifier = Modifier():align({horizontal = "starting", vertical = "center"}),
-      children = {
-        Pill({children = {node.play}}),
-        Pill({no_background = true, children = {node.volume}}),
-        node.time_cache,
-        node.chapter
-      }
+      children = starting
     })
     node.subtitles = IconButton({name = "subtitles-button", icon = "subtitles",
       horizontal_padding = 6, tooltip = "Subtitles",
@@ -829,11 +851,29 @@ function controls.new(services)
       icon = "open_in_full", horizontal_padding = 6, tooltip = "Fullscreen",
       shortcut = "fullscreen",
       on_click = function() mp.commandv("cycle", "fullscreen") end})
+    -- pin button: keeps the window on top at its current size (picture-in-picture
+    -- has its own button)
+    node.ontop = IconButton({name = "ontop-button", icon = "keep_off",
+      horizontal_padding = 6, tooltip = "Pin Window", shortcut = "ontop",
+      on_click = function() mp.commandv("cycle", "ontop") end})
+    node.ontop_visibility = Visibility({
+      visible = config.opts.ontop_button,
+      child = node.ontop
+    })
+    -- info button, runs info_mbtn_left_command (the stats overlay by default)
+    node.info = IconButton({name = "info-button", icon = "info",
+      horizontal_padding = 6, tooltip = "Information",
+      on_click = function() mp.command(config.opts.info_mbtn_left_command) end})
+    node.info_visibility = Visibility({
+      visible = config.opts.info_button,
+      child = node.info
+    })
     node.ending = Pill({
       gap = 0,
       children = {
         node.subtitles_visibility, node.screenshot_visibility,
-        node.pip_visibility, node.settings, node.fullscreen
+        node.pip_visibility, node.settings, node.info_visibility,
+        node.ontop_visibility, node.fullscreen
       },
       modifier = Modifier()
     })
@@ -851,10 +891,22 @@ function controls.new(services)
       self.sponsorblock:update()
       self.screenshot_visibility:set_visible(config.opts.screenshot_button)
       self.pip_visibility:set_visible(config.opts.pip_button)
+      self.ontop_visibility:set_visible(config.opts.ontop_button)
+      self.info_visibility:set_visible(config.opts.info_button)
       if static_changed then
         self.play:update({
           icon = snapshot.paused and "play_arrow" or "pause",
           tooltip = snapshot.paused and "Play" or "Pause"
+        })
+      end
+      if static_changed and config.opts.prev_next_beside_play then
+        local count, position = snapshot.playlist_count or 0, snapshot.playlist_pos or -1
+        local wraps = snapshot.playlist_looping == true
+        self.previous:update({
+          enabled = count > 1 and position >= 0 and (wraps or position > 0)
+        })
+        self.next:update({
+          enabled = count > 1 and position >= 0 and (wraps or position < count - 1)
         })
       end
       local volume_progress = volume_state.animation.value
@@ -892,6 +944,11 @@ function controls.new(services)
         self.fullscreen:update({
           icon = snapshot.fullscreen and "close_fullscreen" or "open_in_full",
           tooltip = snapshot.fullscreen and "Exit Fullscreen" or "Fullscreen"
+        })
+        local pinned = snapshot.ontop == true
+        self.ontop:update({
+          icon = pinned and "keep" or "keep_off",
+          tooltip = pinned and "Unpin Window" or "Pin Window"
         })
       end
     end

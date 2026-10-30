@@ -40,6 +40,10 @@ local MATCHERS = {
       "^multiply%s+speed%s+([%d%.]+)")
     return factor and tonumber(factor) and tonumber(factor) < 1
   end,
+  ontop = function(command)
+    return command:match("^cycle%s+ontop") or
+      command:match("^cycle%-values%s+ontop")
+  end,
   fullscreen = function(command)
     return command:match("^cycle%s+fullscreen") or
       command:match("^cycle%-values%s+fullscreen")
@@ -82,7 +86,7 @@ local PREFERRED_KEYS = {
   pause = "SPACE", mute = "m", ["volume-up"] = "0", ["volume-down"] = "9",
   ["speed-up"] = "]", ["speed-down"] = "[",
   ["temporary-speed"] = "c",
-  fullscreen = "f", screenshot = "s",
+  fullscreen = "f", screenshot = "s", ontop = "T",
   subtitles = "v", ["playlist-next"] = ">", ["playlist-prev"] = "<",
   ["open-settings"] = "Ctrl+,", ["open-playlist"] = "Alt+p"
 }

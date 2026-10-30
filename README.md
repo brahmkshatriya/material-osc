@@ -26,6 +26,9 @@ material-osc can be customized with a `material-osc.conf` file in mpv's
 | Option | Default | Accepted values | Description |
 | --- | --- | --- | --- |
 | `dpi_scale` | `auto` | `auto` or `0.5`–`4` | Uses the display scale automatically or applies a fixed UI scale. |
+| `vidscale` | `no` | `no`, `shrink`, `yes` | Scales the interface with the window height. `shrink` scales it down in windows shorter than `vidscale_reference`, `yes` also scales it up, and `no` keeps a fixed size. |
+| `vidscale_reference` | `720` | Pixels, `100` or more | Window height at which the interface is shown at its normal size. |
+| `vidscale_min` | `0.35` | `0.1`–`1` | Smallest scale factor `vidscale` can reach. |
 | `accent_color` | `"#00bbff"` | Quoted six-digit RGB color | Sets the seekbar, selections, toggles, and other highlighted elements. |
 | `context_menu` | `yes` | `yes`, `no` | Enables the material-osc context menu. When disabled, right-click and menu-key bindings remain available to mpv and other scripts. |
 | `tooltip` | `yes` | `yes`, `no` | Enables tooltips for controls. |
@@ -33,6 +36,10 @@ material-osc can be customized with a `material-osc.conf` file in mpv's
 | `show_empty_screen` | `yes` | `yes`, `no` | Shows the material-osc welcome screen when the playlist is empty. Set to `no` to leave the empty player unobstructed. |
 | `screenshot_button` | `yes` | `yes`, `no` | Shows or hides the screenshot button in the playback controls. |
 | `pip_button` | `yes` | `yes`, `no` | Shows or hides the Picture-in-Picture button in the playback controls. |
+| `ontop_button` | `no` | `yes`, `no` | Shows a pin button in the playback controls that toggles always-on-top. It stays highlighted while pinned. |
+| `info_button` | `no` | `yes`, `no` | Shows an info button in the playback controls that runs `info_mbtn_left_command`. |
+| `info_mbtn_left_command` | `"script-binding stats/display-page-1-toggle"` | Any mpv input command | Command run by the info button. The default toggles the stats overlay. |
+| `prev_next_beside_play` | `no` | `yes`, `no` | Shows previous and next in their own pill beside play/pause instead of in the playlist pill. |
 | `window_controls` | `auto` | `auto`, `yes`, `no` | Shows window controls automatically for borderless and fullscreen windows, always, or never. |
 
 ##### Window controls

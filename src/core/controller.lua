@@ -474,6 +474,11 @@ function controller.new(args)
   function service:on_dimensions(_, value)
     if value and value.w and value.h and value.w > 0 and value.h > 0 then
       runtime.viewport.w, runtime.viewport.h = value.w, value.h
+      local ui_scale = args.window_scale and args.window_scale() or 1
+      if ui_scale ~= runtime.viewport.ui_scale then
+        runtime.viewport.ui_scale = ui_scale
+        args.recreate_app()
+      end
     end
     if args.render_layout then args.render_layout()
     else args.render() end
@@ -483,6 +488,7 @@ function controller.new(args)
     local dpi = tonumber(value) or 1
     if math.abs(dpi - runtime.viewport.dpi) > 0.0001 then
       runtime.viewport.dpi = dpi
+      if args.window_scale then runtime.viewport.ui_scale = args.window_scale() end
       args.recreate_app()
     end
     if args.render_layout then args.render_layout()

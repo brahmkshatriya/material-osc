@@ -260,6 +260,7 @@ function snapshot.reader(deps)
       window_border = property_native("border") ~= false,
       title_bar = property_native("title-bar") ~= false,
       window_maximized = property_native("window-maximized") == true,
+      ontop = property_native("ontop") == true,
       volume = property_number("volume", 0) or 0,
       speed = speed,
       sub_visibility = property_native("sub-visibility") ~= false,

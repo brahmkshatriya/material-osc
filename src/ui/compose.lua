@@ -358,6 +358,7 @@ function compose.new(deps)
         self.transition_progress = props.transition_progress
       end
       if props.alpha ~= nil then self.alpha = props.alpha end
+      if props.icon_color ~= nil then self.icon_color = props.icon_color end
       if props.tooltip ~= nil or props.clear_tooltip then self.tooltip = props.tooltip end
       if props.enabled ~= nil then
         self.enabled = props.enabled

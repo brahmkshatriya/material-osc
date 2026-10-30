@@ -426,6 +426,12 @@ function playlist.new(services, trailing)
     node.next = FooterButton("playlist-next", "skip_next", "Next", next_item,
       "playlist-next", true)
 
+    -- previous/next move beside play/pause with prev_next_beside_play
+    local function footer_buttons()
+      if services.config.opts.prev_next_beside_play then return {node.playlist} end
+      return {node.playlist, node.previous, node.next}
+    end
+
     function node:update(snapshot)
       self.snapshot = snapshot
       self.morph = clamp(playlist_state.animation.value, 0, 1)
@@ -452,7 +458,8 @@ function playlist.new(services, trailing)
       local visible_rows = math.min(math.max(1, item_count), maximum_rows)
       self.panel_height = panel_chrome + visible_rows * row_h
       local target_width =
-        playlist_state.open and self.panel_width or dp(134)
+        playlist_state.open and self.panel_width or
+        dp(services.config.opts.prev_next_beside_play and 42 or 134)
       local target_height =
         playlist_state.open and self.panel_height or dp(42)
       if morphing then
@@ -501,10 +508,12 @@ function playlist.new(services, trailing)
     local function control_metrics(bounds)
       local button = measure_node(node.playlist, bounds)
       local gap, padding = 0, dp(4)
+      local count = #footer_buttons()
+      -- a lone playlist button sits in a circle, like the play button
+      local width = count == 1 and button.h + padding * 2 or
+        button.w * count + gap * (count - 1) + padding * 2
       return button.w, button.h,
-        Rect({x = bounds.x, y = bounds.y,
-          w = button.w * 3 + gap * 2 + padding * 2,
-          h = button.h + padding * 2})
+        Rect({x = bounds.x, y = bounds.y, w = width, h = button.h + padding * 2})
     end
 
     local function draw_control_buttons(ass, source, target, progress)
@@ -512,11 +521,12 @@ function playlist.new(services, trailing)
         measure_node(node.playlist, source).h
       local from_y, to_y = source.y + dp(4), target.y2 - dp(38)
       local y = from_y + (to_y - from_y) * progress
-      for index, button in ipairs({node.playlist, node.previous, node.next}) do
+      local buttons = footer_buttons()
+      for index, button in ipairs(buttons) do
         -- The pill and expanded footer share the same controls. Keep their
         -- horizontal centers fixed so opening only lifts them vertically.
-        local x = source.x + dp(4) +
-          (index - 1) * button_w
+        local x = #buttons == 1 and source.x + (source.w - button_w) / 2 or
+          source.x + dp(4) + (index - 1) * button_w
         draw_node(button, ass, Rect({x = x, y = y, w = button_w, h = button_h}))
       end
     end
@@ -569,7 +579,8 @@ function playlist.new(services, trailing)
 
     function node:draw_expanded(ass, bounds)
       local source = playlist_state.anchor_bounds or Rect({
-        x = bounds.x + dp(12), y = bounds.y2 - dp(54), w = dp(134), h = dp(42)
+        x = bounds.x + dp(12), y = bounds.y2 - dp(54),
+        w = dp(services.config.opts.prev_next_beside_play and 42 or 134), h = dp(42)
       })
       if self.morph <= 0 and not playlist_state.open and
         not playlist_state.animation:is_running() and
