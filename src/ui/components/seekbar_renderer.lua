@@ -10,6 +10,88 @@ function seekbar_renderer.new(deps)
   local enqueue_effect, thumbnail_service = deps.enqueue_effect, deps.thumbnail_service
   local sponsorblock_category_style = deps.sponsorblock_category_style
   local sponsorblock_should_render = deps.sponsorblock_should_render
+  local precise_seek, precise_strip = deps.precise_seek, deps.precise_strip
+  local draw_text, draw_icon = deps.draw_text, deps.draw_icon
+  local text_width = deps.text_width
+
+  local function format_precise(seconds)
+    seconds = math.max(0, seconds or 0)
+    local hours = math.floor(seconds / 3600)
+    local minutes = math.floor(seconds / 60) % 60
+    local secs = math.floor(seconds % 60)
+    if hours > 0 then
+      return string.format("%d:%02d:%02d", hours, minutes, secs)
+    end
+    return string.format("%d:%02d", minutes, secs)
+  end
+
+  -- Precise seeking: the time above the seekbar, a close button and a
+  -- filmstrip below it in place of the control row. The time pill matches the
+  -- seek preview's, the close button the media information one.
+  local function draw_precise(ass, x1, x2, seek_y, duration)
+    local precise = runtime.seek.precise
+    local position = precise_seek:position()
+    local seconds_per_px = precise_seek:seconds_per_pixel()
+    if seconds_per_px <= 0 then return end
+    local center_x = (x1 + x2) / 2
+    precise.strip_center = center_x
+
+    local text_size = 22
+    local time_text = format_precise(position)
+    local pill_h = dp(text_size) + dp(4) * 2
+    local pill_w = text_width(time_text, text_size) + dp(12) * 2
+    local pill_y2 = seek_y - dp(12)
+    local pill_x1 = center_x - pill_w / 2
+    draw_box(ass, pill_x1, pill_y2 - pill_h, pill_x1 + pill_w, pill_y2,
+      pill_h / 2, "#050708", "33")
+    draw_text(ass, center_x, pill_y2 - pill_h / 2, time_text, text_size,
+      "#FFFFFF")
+
+    -- close button: finishes precise seeking at the current position
+    local close = {x1 = x2 - pill_h, y1 = pill_y2 - pill_h, x2 = x2, y2 = pill_y2}
+    precise.close_bounds = close
+    draw_box(ass, close.x1, close.y1, close.x2, close.y2, pill_h / 2,
+      "#050708", "14")
+    if mouse_in(close) then
+      draw_box(ass, close.x1, close.y1, close.x2, close.y2, pill_h / 2,
+        "#FFFFFF", "D6")
+    end
+    draw_icon(ass, (close.x1 + close.x2) / 2, (close.y1 + close.y2) / 2,
+      "close", "#FFFFFF", 20, "00")
+
+    -- filmstrip, framed like the seek preview thumbnail
+    local area = precise.strip_bounds
+    if not area then return end
+    local strip = {x1 = x1, x2 = x2, y1 = area.y + dp(10), y2 = area.y2 - dp(2)}
+    precise.strip_area = strip
+    local strip_h = math.floor(strip.y2 - strip.y1)
+    draw_box(ass, strip.x1, strip.y1, strip.x2, strip.y2, 0, "#050708", "20")
+    if not precise_strip or runtime.snapshot.network or
+      not precise_strip:available() then
+      draw_text(ass, center_x, (strip.y1 + strip.y2) / 2,
+        "Filmstrip is available for local files", 15, "#CAC4D0")
+      draw_box(ass, center_x - dp(1), strip.y1 - dp(4), center_x + dp(1),
+        strip.y2 + dp(4), 0, "#FFFFFF", "00")
+      return
+    end
+    local tile_w = math.max(math.floor(strip_h * precise_strip:aspect() + 0.5),
+      math.ceil((strip.x2 - strip.x1) / 13))
+    local tiles = precise_strip:update({
+      x1 = strip.x1, x2 = strip.x2, y1 = strip.y1, y2 = strip.y2,
+      center_x = center_x, position = position, duration = duration,
+      seconds_per_px = seconds_per_px, tile_w = tile_w, tile_h = strip_h
+    })
+    -- placeholders for tiles that are still being generated
+    for _, tile in ipairs(tiles) do
+      if not tile.ready then
+        local tx1 = math.max(tile.x1, strip.x1)
+        local tx2 = math.min(tile.x2, strip.x2)
+        if tx2 > tx1 then
+          draw_box(ass, tx1, strip.y1, tx2, strip.y2, 0, "#282828", "99")
+        end
+      end
+    end
+  end
 
   local function draw_seekbar(ass, x1, y, x2)
     runtime.seek.preview_bounds = nil
@@ -158,7 +240,11 @@ function seekbar_renderer.new(deps)
          handle_x + handle_w / 2, handle_y + handle_h / 2, handle_w / 2,
          opts.accent_color, "00")
   
-    if runtime.seek.dragging or hovering_seek then
+    local precise_active = precise_seek and precise_seek:active()
+    if precise_active then
+      draw_precise(ass, x1, x2, seek_y, duration)
+      enqueue_effect("thumbnail-clear", function() thumbnail_service:clear() end)
+    elseif runtime.seek.dragging or hovering_seek then
       local preview_pos = runtime.seek.dragging and runtime.seek.position or seek_pos_from_mouse(preview_area)
       draw_thumbnail_preview(ass, x1, seek_y, x2, preview_pos)
     else

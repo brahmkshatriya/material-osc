@@ -51,7 +51,8 @@ function application_state.new(args)
     temporary_speed = {active = false, previous = nil},
     seek = {
       dragging = false, position = nil, offset_x = 0,
-      preview_bounds = nil, position_pill_visible = false
+      preview_bounds = nil, position_pill_visible = false,
+      precise = {active = false}
     },
     wheel = {kind = nil, amount = 0, timer = nil},
     edge_seek = {

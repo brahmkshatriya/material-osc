@@ -66,6 +66,13 @@ aspect ratio, and disables automatic window resizing between files; see
 | `drag_border` | `16` | Pixels; `0` disables the band | Width of the band along the window edges that drags the window, also over controls. Elsewhere the window drags from empty space and the video, but not from buttons, sliders or open menus. |
 | `seeking_zone_percentage` | `15` | `0`–`50` | Sets each fast-seek zone's width as a percentage of the window. |
 | `seek_step_seconds` | `5` | Seconds; minimum `1` | Sets how far edge clicks and edge scrolling seek backward or forward. |
+| `precise_seek` | `no` | `yes`, `no` | Enables precise seeking: pull up while dragging the seekbar. See [Precise seeking](#precise-seeking). |
+| `precise_seek_span` | `30` | Seconds; minimum `1` | Sets how many seconds the full seekbar width covers while seeking precisely. |
+| `precise_seek_step` | `2` | Seconds | Sets how far each horizontal scroll or swipe step seeks while seeking precisely. |
+| `precise_seek_threshold` | `40` | Pixels; minimum `8` | Sets how far up the pointer must move while dragging the seekbar to start precise seeking. |
+| `precise_seek_invert_swipe` | `no` | `yes`, `no` | Reverses the direction of horizontal scrolling and swiping while seeking precisely. |
+| `precise_strip` | `yes` | `yes`, `no` | Shows a filmstrip of thumbnails below the seekbar while seeking precisely. |
+| `precise_strip_height` | `96` | Pixels, `40`–`240` | Sets the filmstrip height. |
 | `live_edge_offset_seconds` | `2` | Non-negative seconds or `-1` | After a live stream resumes from pausing or buffering, seeks this far behind the live edge. Set to `-1` to disable automatic catch-up. |
 | `temporary_speed` | `2` | Playback rate greater than `0` | Sets the speed used while the `hold-double-speed` binding is held. |
 | `show_remaining_time` | `no` | `yes`, `no` | Shows remaining time instead of elapsed time by default. The time display remains clickable to toggle modes. |
@@ -175,6 +182,23 @@ behavior, including support for network media, is configured through Thumbfast:
 # script-opts/thumbfast.conf
 network=yes
 ```
+
+### Precise seeking
+
+With `precise_seek=yes`, pull up while dragging the seekbar to seek
+precisely. The seekbar then covers `precise_seek_span` seconds around the
+current position and the video shows the exact frame as you drag. Precise
+seeking stays open after you let go:
+
+- Drag on the video to scrub finely, or click to finish there
+- Scroll or swipe horizontally to step `precise_seek_step` seconds, and
+  vertically (or use <kbd>Left</kbd>/<kbd>Right</kbd>) to step single frames
+- Press <kbd>Enter</kbd> or the close button to keep the position, or
+  <kbd>Esc</kbd> to return to where you started
+
+A filmstrip of thumbnails replaces the control row for local files. Drag it
+like film or click a thumbnail to jump there. Thumbnails are generated with
+`ffmpeg` when it is installed and with mpv otherwise.
 
 ### Optional media-title parsing
 
