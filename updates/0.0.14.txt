@@ -1,0 +1,11 @@
+- Added optional precise seeking: enable `precise_seek` and pull up while dragging the seekbar to scrub exact frames on a zoomed timeline. Use scrolling, swipes, or arrow keys to refine the position, Enter to confirm, or Esc to return to the starting point.
+- Added a draggable thumbnail filmstrip for precise seeking in local files, generated with ffmpeg when available and mpv otherwise, with configurable height and seeking behavior.
+- Added optional always-on-top and info buttons, a configurable info command, and an option to place previous/next controls beside play/pause.
+- Added interface scaling based on window height with `vidscale`, including configurable reference height and minimum scale.
+- Improved window dragging from empty space and window edges, made buttons activate on release, and corrected touchpad scrolling to respect fractional wheel movements.
+- Now respects configured mpv window sizing, volume limits, video synchronization, and force-window settings by default, with explicit options to override window geometry and automatic resizing.
+- Fixed window resizing when entering Picture-in-Picture on Windows and when custom window sizing is configured.
+- Added configurable live-stream catch-up after pausing or buffering with `live_edge_offset_seconds`.
+- Improved stream-quality handling and fixed Windows directory creation and error reporting.
+
+- Thanks to @SifeYassine for precise seeking, the filmstrip, interface customization, and window/input fixes; @Kaktusmann for preserving mpv configuration and fixing Windows directory creation; and @brahmkshatriya for live-stream improvements and Picture-in-Picture fixes.
