@@ -63,6 +63,17 @@ local definitions = {
   {name = "seeking_zone_percentage", default = 15, group = "behavior",
     normalize = number({default = 15, min = 0, max = 50})},
   {name = "seek_step_seconds", default = 5, group = "behavior"},
+  {name = "precise_seek", default = false, group = "behavior"},
+  {name = "precise_seek_span", default = 30, group = "behavior",
+    normalize = number({default = 30, min = 1})},
+  {name = "precise_seek_step", default = 2, group = "behavior",
+    normalize = number({default = 2, min = 0.01})},
+  {name = "precise_seek_threshold", default = 40, group = "behavior",
+    normalize = number({default = 40, min = 8})},
+  {name = "precise_seek_invert_swipe", default = false, group = "behavior"},
+  {name = "precise_strip", default = true, group = "behavior"},
+  {name = "precise_strip_height", default = 96, group = "behavior",
+    normalize = number({default = 96, min = 40, max = 240})},
   {name = "live_edge_offset_seconds", default = 2, group = "behavior",
     normalize = function(value)
       value = tonumber(value) or 2

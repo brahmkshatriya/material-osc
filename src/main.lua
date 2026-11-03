@@ -648,6 +648,18 @@ local player = player_module.new({
   render = function() render(false, "dynamic") end
 })
 local format_time = function(value) return player:format_time(value) end
+-- precise seeking services, kept in one table: the main chunk is close to
+-- Lua's limit of 200 local variables
+local precise = {}
+precise.seek = require("src.services.precise_seek").new({
+  mp = mp, runtime = runtime, opts = opts,
+  render = function() render(false) end,
+  render_dynamic = function() render(true, "dynamic") end
+})
+precise.strip = require("src.services.precise_strip").new({
+  mp = mp, utils = utils, msg = msg,
+  render = function() render(true, "dynamic") end
+})
 local chapter_name_at = function(value) return player:chapter_at(value) end
 local seek_pos_from_mouse = function(box) return player:seek_position(box) end
 local seek_to_pos = function(value) return player:seek(value) end
@@ -875,7 +887,10 @@ draw_seekbar = seekbar_renderer_module.new({
   sponsorblock_should_render = function(category)
     return sponsorblock_service:should_render_segment(category)
   end,
-  enqueue_effect = enqueue_effect, thumbnail_service = thumbnail_service
+  enqueue_effect = enqueue_effect, thumbnail_service = thumbnail_service,
+  precise_seek = precise.seek, draw_text = draw_text,
+  text_width = text_intrinsic_width, draw_icon = draw_icon,
+  precise_strip = opts.precise_strip and precise.strip or nil
 })
 
 local keybinding_hints = keybinding_hints_module.new({
@@ -927,6 +942,7 @@ local services = {
   bookmarks = bookmark_service,
   easter_eggs = easter_egg_collection,
   context_actions = context_actions,
+  precise_seek = precise.seek,
   sponsorblock = sponsorblock_service,
   toast = toast_service,
   close_context_menu = close_context_menu,
@@ -1058,8 +1074,18 @@ local function update_animation_targets(now)
   animation_coordinator:update(now)
 end
 
+precise.seek.on_active_changed = function(active)
+  if runtime_host then runtime_host:set_wheel_enabled(not active) end
+  if not active then
+    precise.strip:clear()
+    runtime.seek.precise.strip_bounds = nil
+    runtime.seek.precise.strip_area = nil
+    runtime.seek.precise.close_bounds = nil
+  end
+end
 runtime_host = mpv_runtime_module.new({
   state = runtime, mp = mp, navigation = navigation, opts = opts,
+  precise_seek = precise.seek,
   context_menu_enabled = function() return opts.context_menu end,
   menu_keyboard = menu_keyboard,
   playback_indicator = playback_indicator,
@@ -1232,6 +1258,7 @@ local function recreate_app() app = create_app(services) end
 controller = controller_module.new({
   runtime = runtime, mp = mp, opts = opts, navigation = navigation,
   window_scale = function() return ui_renderer:window_scale() end,
+  precise_seek = precise.seek,
   update_dragging = function() runtime_host:update_dragging() end,
   thumbnail = thumbnail_service, mouse_in = mouse_in,
   edge_seek_top_inset = edge_seek_top_inset,

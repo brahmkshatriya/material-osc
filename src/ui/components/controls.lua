@@ -34,6 +34,10 @@ function controls.new(services)
   local ConnectedPill = ui.ConnectedPill
   local is_render_pass = ui.is_render_pass
 
+  local function precise_seeking()
+    return services.precise_seek and services.precise_seek:active()
+  end
+
   local function set_pip_enabled(enabled, requested_window_state)
     timers:cancel(state.pip, "raise_timer")
     if enabled then
@@ -298,6 +302,10 @@ function controls.new(services)
       name = "seekbar",
       extend_y = dp(6),
       on_press = function(box)
+        local precise = services.precise_seek
+        -- a new seekbar press leaves precise seeking (keeping its position)
+        if precise and precise:active() then precise:exit(true) end
+        seek_state.press_y = pointer.y
         local duration = get_snapshot().duration or 0
         local current_pos = get_snapshot().position or 0
         local handle_x = box.x1
@@ -310,9 +318,36 @@ function controls.new(services)
         preview_seek_to_mouse(box)
       end,
       on_move = function(box)
-        if seek_state.dragging then preview_seek_to_mouse(box) end
+        if not seek_state.dragging then return end
+        local precise = services.precise_seek
+        if precise and precise:active() then
+          precise:scrub_to(pointer.x)
+          return
+        end
+        -- pulling up while dragging switches to precise seeking
+        if precise and config.opts.precise_seek and seek_state.press_y and
+          pointer.y < seek_state.press_y - dp(config.opts.precise_seek_threshold) then
+          local position = seek_state.position or seek_pos_from_mouse(box)
+          if precise:enter(position, box.x2 - box.x1) then
+            precise:begin_scrub(pointer.x)
+            return
+          end
+        end
+        preview_seek_to_mouse(box)
       end,
       on_release = function(box)
+        local precise = services.precise_seek
+        if precise and precise:active() then
+          -- precise seeking stays open after the drag; the video is already
+          -- showing the chosen frame
+          precise:end_scrub()
+          seek_state.dragging = false
+          seek_state.position = nil
+          seek_state.offset_x = 0
+          seek_state.press_y = nil
+          return
+        end
+        seek_state.press_y = nil
         local pos = seek_pos_from_mouse(box)
         seek_state.position = pos
         seek_to_pos(pos)
@@ -954,6 +989,12 @@ function controls.new(services)
     end
 
     function node:measure(parent)
+      -- precise seeking (YouTube-style): the filmstrip takes the row's place
+      if precise_seeking() then
+        -- strip height plus the gap above it
+        local strip_h = tonumber(config.opts.precise_strip_height) or 96
+        return apply_modifier_size(self.modifier, {w = 0, h = dp(strip_h + 12)}, parent)
+      end
       local starting_size = measure_node(self.starting, parent)
       local ending_size = measure_node(self.ending_actions, parent)
       return apply_modifier_size(self.modifier, {
@@ -963,11 +1004,17 @@ function controls.new(services)
     end
 
     function node:draw(ass, bounds)
+      if precise_seeking() then
+        state.seek.precise.strip_bounds = bounds
+        return
+      end
+      state.seek.precise.strip_bounds = nil
       draw_node(self.starting, ass, bounds)
       draw_node(self.ending_actions, ass, bounds)
     end
 
     function node:draw_dynamic(ass)
+      if precise_seeking() then return end
       if self.volume.bounds then self.volume:draw(ass, self.volume.bounds) end
       if self.time.bounds then self.time:draw(ass, self.time.bounds) end
       if self.cached.visible and self.cached_time.bounds then
@@ -976,6 +1023,7 @@ function controls.new(services)
     end
 
     function node:draw_volume_interaction(ass)
+      if precise_seeking() then return end
       if self.volume.bounds then self.volume:draw(ass, self.volume.bounds) end
     end
 

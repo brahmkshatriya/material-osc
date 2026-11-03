@@ -93,8 +93,18 @@ function controller.new(args)
     return visibility_changed
   end
 
+  local passthrough_hitboxes = {
+    ["video-surface"] = true, ["window-drag-area"] = true,
+    ["controller-area"] = true
+  }
+
+  local function precise_active()
+    return args.precise_seek and args.precise_seek:active()
+  end
+
   function service:interaction_requires_visibility()
     if runtime.update.open then return true end
+    if precise_active() then return true end
     if runtime.seek.dragging or runtime.volume.dragging or
       runtime.pointer.window_dragging then
       return true
@@ -214,6 +224,9 @@ function controller.new(args)
     end
     local active = runtime.pointer.active
     if active and active.on_move then active.on_move(active) end
+    if runtime.pointer.precise_scrub and precise_active() then
+      args.precise_seek:scrub_to(runtime.pointer.x)
+    end
     if args.update_dragging then args.update_dragging() end
     -- Update top-hover ownership before hiding or showing the bottom
     -- controller. Any visibility render triggered below then sees the correct
@@ -279,6 +292,24 @@ function controller.new(args)
     self:update_window_controls_hover()
     local _, box = args.hitbox_at_cursor()
     runtime.pointer.pressed_button = nil
+    -- in precise seeking, pressing on the video scrubs finely (a plain click
+    -- confirms on release); buttons and the seekbar keep working normally
+    if precise_active() then
+      local precise = runtime.seek.precise
+      if precise.close_bounds and args.mouse_in(precise.close_bounds) then
+        args.precise_seek:exit(true)
+        self:sync_visibility_with_pointer()
+        return
+      end
+      local on_strip = precise.strip_area and args.mouse_in(precise.strip_area)
+      if on_strip or not box or passthrough_hitboxes[box.name] or
+        tostring(box.name):match("^edge%-seek%-") then
+        runtime.pointer.precise_scrub = on_strip and "strip" or "video"
+        args.precise_seek:begin_scrub(runtime.pointer.x, on_strip)
+        self:sync_visibility_with_pointer()
+        return
+      end
+    end
     if box and box.on_press then
       if box.on_move or box.on_release then runtime.pointer.active = box end
       box.on_press(box)
@@ -309,6 +340,21 @@ function controller.new(args)
   end
 
   function service:on_primary_up()
+    if runtime.pointer.precise_scrub then
+      local from_strip = runtime.pointer.precise_scrub == "strip"
+      runtime.pointer.precise_scrub = nil
+      self:update_mouse()
+      if precise_active() then
+        args.precise_seek:scrub_to(runtime.pointer.x)
+        if not args.precise_seek:end_scrub() then
+          -- a click on the strip jumps there; a click on the video finishes
+          if from_strip then args.precise_seek:jump_to_x(runtime.pointer.x)
+          else args.precise_seek:exit(true) end
+        end
+      end
+      self:sync_visibility_with_pointer()
+      return
+    end
     local active = runtime.pointer.active
     if active and active.on_release then
       self:update_mouse()
@@ -346,6 +392,10 @@ function controller.new(args)
 
   function service:on_primary_button(event)
     if event and event.canceled then
+      if runtime.pointer.precise_scrub and precise_active() then
+        args.precise_seek:end_scrub()
+      end
+      runtime.pointer.precise_scrub = nil
       runtime.pointer.active = nil
       runtime.pointer.pending_click = nil
       runtime.pointer.pressed_button = nil
@@ -436,6 +486,8 @@ function controller.new(args)
   end
 
   function service:on_wheel(direction)
+    -- precise seeking binds the wheel itself (frame stepping)
+    if precise_active() then return end
     runtime.controller.pointer_timed_out = false
     self:update_mouse()
     self:arm_hide_timer()
