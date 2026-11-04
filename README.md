@@ -31,6 +31,9 @@ material-osc can be customized with a `material-osc.conf` file in mpv's
 | `vidscale_min` | `0.35` | `0.1`–`1` | Smallest scale factor `vidscale` can reach. |
 | `accent_color` | `"#00bbff"` | Quoted six-digit RGB color | Sets the seekbar, selections, toggles, and other highlighted elements. |
 | `context_menu` | `yes` | `yes`, `no` | Enables the material-osc context menu. When disabled, right-click and menu-key bindings remain available to mpv and other scripts. |
+| `context_menu_items` | `material` | `material`, `input_conf` | Chooses the context menu's items: material-osc's own menu, or one built from `input.conf`. See [Context menu from input.conf](#context-menu-from-inputconf). |
+| `menu_max_title_length` | `80` | Characters; `0` disables the limit | With `context_menu_items=input_conf`, shortens long track, chapter and playlist titles. |
+| `menu_max_playlist_items` | `20` | Items; `0` disables the limit | With `context_menu_items=input_conf`, limits how many playlist entries the `#@playlist` submenu shows around the current one. |
 | `tooltip` | `yes` | `yes`, `no` | Enables tooltips for controls. |
 | `show_mini_seekbar` | `no` | `yes`, `no` | Keeps a 1dp playback-progress line at the bottom while the main controls are hidden. |
 | `show_empty_screen` | `yes` | `yes`, `no` | Shows the material-osc welcome screen when the playlist is empty. Set to `no` to leave the empty player unobstructed. |
@@ -199,6 +202,39 @@ seeking stays open after you let go:
 A filmstrip of thumbnails replaces the control row for local files. Drag it
 like film or click a thumbnail to jump there. Thumbnails are generated with
 `ffmpeg` when it is installed and with mpv otherwise.
+
+### Context menu from input.conf
+
+With `context_menu_items=input_conf`, the context menu is built from `#menu:`
+comments in `input.conf`. If `input.conf` has none, material-osc's own menu is
+used.
+
+```conf
+s      screenshot    #menu: Video > Take Screenshot
+_      ignore        #menu: Video > -
+_      ignore        #menu: Video > Tracks #@tracks/video
+_      ignore        #menu: Tracks #@tracks
+SPACE  cycle pause   #menu: Pause #@state=(pause and 'checked')
+```
+
+` > ` nests submenus, `-` adds a separator, and the key is shown next to the
+item (use `_` for no key). Submenus open on hover, on click or with the arrow
+keys. A menu that doesn't fit the window scrolls.
+
+`#@` tags make an entry dynamic:
+
+| Tag | Effect |
+| --- | --- |
+| `#@tracks`, `#@tracks/video`, `#@tracks/audio`, `#@tracks/sub`, `#@tracks/sub-secondary` | Lists the tracks |
+| `#@chapters`, `#@editions`, `#@playlist`, `#@audio-devices`, `#@profiles` | Lists the chapters, editions, playlist entries, audio devices or profiles |
+| `#@state=<expression>` | A Lua expression returning `checked`, `disabled` or `hidden` (comma separated). Names read mpv properties (`pause`, `idle_active`, `p["sub-visibility"]`) |
+| `#@<anything else>` | A slot other scripts can fill |
+
+Scripts wait for the `menu-ready <client>` broadcast and fill a slot with
+`script-message-to <client> update <tag> <json>`, where the JSON is an item such
+as `{"title": "Label\tHint", "cmd": "...", "type": "submenu", "submenu": [...]}`.
+`script-message-to <client> get <tag> <client-name>` replies with the current
+item as `menu-get-reply`.
 
 ### Optional media-title parsing
 
