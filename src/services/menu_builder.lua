@@ -157,10 +157,7 @@ function menu_builder.new(args)
             target[#target + 1] = {type = "separator"}
           else
             local item = {title = name, cmd = command}
-            if key ~= "_" then
-              item.title = item.title .. "\t" ..
-                (args.format_key and args.format_key(key) or key)
-            end
+            if key ~= "_" then item.title = item.title .. "\t" .. key end
             target[#target + 1] = item
             local tags = parse_tags(command)
             if #tags > 0 then

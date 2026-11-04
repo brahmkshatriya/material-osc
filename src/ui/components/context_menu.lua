@@ -193,17 +193,7 @@ function context_menu.new(services)
       local hovered = node.interactive and not item.disabled and
         ui.mouse_in(bounds)
       local active = item.submenu and state.path[self.level] == item.submenu_index
-      local center_y = bounds.y + bounds.h / 2
-      if item.checked then
-        -- checked rows look like the selected rows of the playlist and popups
-        local dot = dp(6)
-        ui.draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2,
-          bounds.h / 2, opts.accent_color, ui.alpha(opacity * 0.30),
-          true, node.clip_bounds)
-        ui.draw_box(ass, bounds.x + dp(14) - dot / 2, center_y - dot / 2,
-          bounds.x + dp(14) + dot / 2, center_y + dot / 2, dot / 2,
-          opts.accent_color, ui.alpha(opacity), true, node.clip_bounds)
-      elseif hovered or active then
+      if hovered or active then
         ui.draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2,
           bounds.h / 2, "#FFFFFF",
           ui.alpha(base_opacity * (hovered and 0.15 or 0.10)),
@@ -215,29 +205,32 @@ function context_menu.new(services)
           prefix(self.level - 1, item.submenu_index) or prefix(self.level - 1))
       end
       if active then node.anchors[self.level] = bounds end
-      if item.icon then
-        ui.draw_icon(ass, bounds.x + dp(22), center_y, item.icon, "#CAC4D0", 22,
+      local center_y = bounds.y + bounds.h / 2
+      local icon = item.icon or (item.checked and "check")
+      if icon then
+        ui.draw_icon(ass, bounds.x + layout.icon_x, center_y, icon,
+          item.checked and opts.accent_color or "#CAC4D0", layout.icon_size,
           ui.alpha(opacity), true, node.clip_bounds)
       end
-      local text_x = bounds.x + (item.checked and not layout.has_icons and
-        dp(28) or layout.text_inset)
+      local text_x = bounds.x + layout.text_inset
       local trailing = layout.end_inset
       if item.submenu then
         ui.draw_icon(ass, bounds.x2 - layout.end_inset - dp(4), center_y,
-          "chevron_right", "#CAC4D0", 20, ui.alpha(opacity), true,
-          node.clip_bounds)
+          "chevron_right", "#CAC4D0", layout.icon_size - 2,
+          ui.alpha(opacity), true, node.clip_bounds)
         trailing = layout.end_inset + dp(20)
       end
       if item.shortcut and item.shortcut ~= "" then
-        ui.draw_text(ass, bounds.x2 - trailing, center_y, item.shortcut, 19,
-          item.checked and opts.accent_color or "#CAC4D0", ui.alpha(opacity),
+        ui.draw_text(ass, bounds.x2 - trailing, center_y, item.shortcut,
+          layout.shortcut_size, "#CAC4D0", ui.alpha(opacity * 0.8),
           ui.default_text_font, 6, nil, true, node.clip_bounds)
-        trailing = trailing + ui.text_width(item.shortcut, 19) + dp(14)
+        trailing = trailing +
+          ui.text_width(item.shortcut, layout.shortcut_size) + dp(14)
       end
       ui.draw_text(ass, text_x, center_y,
         ui.truncate_to_width(item.label,
-          math.max(0, bounds.x2 - trailing - text_x), 20),
-        20, "#FFFFFF", ui.alpha(opacity), ui.default_text_font,
+          math.max(0, bounds.x2 - trailing - text_x), layout.text_size),
+        layout.text_size, "#FFFFFF", ui.alpha(opacity), ui.default_text_font,
         4, nil, true, node.clip_bounds)
     end
     return row
@@ -315,27 +308,21 @@ function context_menu.new(services)
         }))
         row_index = row_index + 1
       end
-      y = y + height + gap
+      y = y + height + (item.separator and layout.separator_gap or gap)
     end
     for index = row_index, #(node.rows[level] or {}) do
       node.rows[level][index].item = nil
     end
 
     if layout.max_scroll > 0 then
-      -- same look as the playlist's scrollbar
       local track_h = bounds.h - padding * 2
       local visible = math.max(0.1, 1 - layout.max_scroll / #layout.items)
-      local thumb_h = math.max(dp(32), track_h * visible)
+      local thumb_h = math.max(dp(20), track_h * visible)
       local thumb_y = bounds.y + padding +
         (track_h - thumb_h) * (state.scrolls[level] or 0) / layout.max_scroll
-      local opacity = node.content_opacity * content_opacity
-      local center_x = bounds.x2 - padding / 2
-      ui.draw_box(ass, center_x - dp(2), bounds.y + padding, center_x + dp(2),
-        bounds.y2 - padding, dp(2), "#FFFFFF", ui.alpha(opacity * 0.14),
-        true, bounds)
-      ui.draw_box(ass, center_x - dp(3), thumb_y, center_x + dp(3),
-        thumb_y + thumb_h, dp(3), "#FFFFFF", ui.alpha(opacity * 0.58),
-        true, bounds)
+      ui.draw_box(ass, bounds.x2 - dp(4), thumb_y, bounds.x2 - dp(1.5),
+        thumb_y + thumb_h, dp(1.25), "#FFFFFF",
+        ui.alpha(node.content_opacity * content_opacity * 0.3), true, bounds)
     end
   end
 
@@ -369,17 +356,41 @@ function context_menu.new(services)
     return items
   end
 
-  local function measure_level(items)
+  -- compact: the dense layout of the input.conf menu; otherwise material's
+  -- own menu metrics
+  local function measure_level(items, compact)
     local layout = {
-      items = items, has_icons = false, max_scroll = 0,
-      padding = dp(8), gap = dp(4), end_inset = dp(14)
+      items = items, has_icons = not compact, max_scroll = 0,
+      padding = dp(compact and 6 or 8), gap = dp(compact and 0 or 4),
+      separator_gap = dp(compact and 4 or 4),
+      text_size = compact and 18 or 20, shortcut_size = compact and 15 or 17,
+      icon_size = compact and 19 or 22, icon_x = dp(compact and 18 or 22),
+      end_inset = dp(compact and 12 or 14)
     }
+    local widest = 0
     for _, item in ipairs(items) do
-      if item.icon then layout.has_icons = true end
+      if item.icon or item.checked then layout.has_icons = true end
+      if not item.separator then
+        local width = ui.text_width(item.label or "", layout.text_size)
+        if item.shortcut and item.shortcut ~= "" then
+          width = width + ui.text_width(item.shortcut, layout.shortcut_size) +
+            dp(14)
+        end
+        if item.submenu then width = width + dp(20) end
+        widest = math.max(widest, width)
+      end
     end
-    layout.text_inset = dp(layout.has_icons and 46 or 16)
+    layout.text_inset = layout.has_icons and dp(compact and 38 or 46) or
+      dp(compact and 14 or 16)
     local viewport = services.state.viewport
-    layout.w = math.max(dp(220), math.min(dp(330), viewport.w - dp(16)))
+    local max_w = math.max(dp(160), viewport.w - dp(16))
+    if compact then
+      local chrome = layout.padding * 2 + layout.text_inset +
+        layout.end_inset + dp(8)
+      layout.w = math.min(max_w, clamp(widest + chrome, dp(180), dp(400)))
+    else
+      layout.w = math.max(dp(220), math.min(dp(330), max_w))
+    end
 
     local rows, separators = 0, 0
     for _, item in ipairs(items) do
@@ -387,11 +398,14 @@ function context_menu.new(services)
       else rows = rows + 1 end
     end
     local available_h = math.max(dp(32), viewport.h - dp(16))
-    local fixed = layout.padding * 2 + separators * separator_h +
-      math.max(0, #items - 1) * layout.gap
-    -- shrink rows to fit, then scroll whatever still overflows
-    layout.row_h = math.min(dp(42),
-      math.max(dp(32), (available_h - fixed) / math.max(1, rows)))
+    local gaps = 0
+    for index = 1, #items - 1 do
+      gaps = gaps + (items[index].separator and layout.separator_gap or layout.gap)
+    end
+    local fixed = layout.padding * 2 + separators * separator_h + gaps
+    -- shrink rows to fit (down to 28dp), then scroll whatever still overflows
+    layout.row_h = math.min(dp(compact and 32 or 42),
+      math.max(dp(compact and 28 or 32), (available_h - fixed) / math.max(1, rows)))
     local content_h = fixed + rows * layout.row_h
     layout.h = math.min(content_h, available_h)
     if content_h > available_h then
@@ -400,7 +414,8 @@ function context_menu.new(services)
       for index = #items, 1, -1 do
         local item = items[index]
         local height = (item.separator and separator_h or layout.row_h) +
-          (index < #items and layout.gap or 0)
+          (index < #items and
+            (item.separator and layout.separator_gap or layout.gap) or 0)
         if used + height > room then break end
         used, first = used + height, index
       end
@@ -421,12 +436,12 @@ function context_menu.new(services)
           end
           break
         end
-        levels[level] = measure_level(items)
+        levels[level] = measure_level(items, true)
       end
     end
     if not levels[1] then
       state.path = {}
-      levels[1] = measure_level(actions:items(snapshot))
+      levels[1] = measure_level(actions:items(snapshot), false)
     end
     for level, layout in ipairs(levels) do
       state.scrolls[level] = clamp(state.scrolls[level] or 0, 0, layout.max_scroll)
@@ -524,7 +539,9 @@ function context_menu.new(services)
 
     -- root panel morphs open from the click point
     self.anchors = {}
-    local root_radius = dp(14) + dp(14) * self.morph
+    local compact = self.levels[1].padding < dp(8)
+    local root_radius = compact and (dp(10) + dp(8) * self.morph) or
+      (dp(14) + dp(14) * self.morph)
     local shell_opacity = state.open and
       (0.53 + self.morph * 0.39) or self.morph * 0.92
     draw_level(ass, 1, surface, root_radius, shell_opacity, 1)
@@ -566,7 +583,7 @@ function context_menu.new(services)
         w = w,
         h = start_h + (layout.h - start_h) * progress
       })
-      local radius = dp(14) + dp(14) * progress
+      local radius = dp(10) + dp(8) * progress
       local content = clamp((progress - 0.35) / 0.65, 0, 1)
       draw_level(ass, level, rect, radius,
         0.92 * self.content_opacity * clamp(progress * 1.6, 0, 1), content)

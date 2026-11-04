@@ -944,8 +944,7 @@ local services = {
   context_actions = context_actions,
   menu_items = (function()
     local builder = require("src.services.menu_builder").new({
-      mp = mp, utils = utils, msg = msg, opts = opts,
-      format_key = keybinding_hints_module.label
+      mp = mp, utils = utils, msg = msg, opts = opts
     })
     -- read input.conf and announce the menu to other scripts right away
     if opts.context_menu_items == "input_conf" then builder:start() end

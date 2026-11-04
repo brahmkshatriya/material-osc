@@ -135,12 +135,6 @@ local function labels_for_key(key)
   return {table.concat(parts, " + ")}
 end
 
--- the label shown for a key, like "Ctrl + S"
-function keybinding_hints.label(key)
-  local label = labels_for_key(key)[1]
-  return label ~= "" and label or tostring(key)
-end
-
 function keybinding_hints.new(args)
   local service = {}
   local cached_bindings, cached_at
