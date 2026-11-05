@@ -4,10 +4,11 @@ local context_menu = {}
 local HOVER_DELAY = 0.2
 -- submenu open animation length
 local SUBMENU_DURATION = 0.18
+-- width is only measured for this many rows of a long list
+local MEASURED_ROWS = 200
 
 function context_menu.new(services)
   local state, ui = services.state.context_menu, services.ui
-  local actions = services.context_actions
   local menu_items = services.menu_items
   local opts = services.config.opts
   local render = services.effects.render
@@ -16,12 +17,14 @@ function context_menu.new(services)
   local Modifier, Rect = ui.Modifier, ui.Rect
   local draw_node = ui.draw_node
   local separator_h = dp(1)
+  local page_button_h = dp(24)
   local node = {
     -- levels[1] is the root panel, levels[k] the submenu at state.path[k - 1]
     levels = {}, panels = {}, rows = {}, anchors = {},
+    page_buttons = {}, visible = {},
     -- per submenu level: which submenu is shown and when it started opening
     opened = {},
-    panel_w = dp(330), panel_h = 0,
+    panel_w = dp(200), panel_h = 0,
     morph = 0, content_opacity = 0, interactive = false, was_open = false,
     animation_frame = nil,
     modifier = Modifier():fillMaxWidth():fillMaxHeight():drawBehindInteraction(false)
@@ -206,11 +209,17 @@ function context_menu.new(services)
       end
       if active then node.anchors[self.level] = bounds end
       local center_y = bounds.y + bounds.h / 2
-      local icon = item.icon or (item.checked and "check")
+      local icon = item.checked and "check" or item.icon
       if icon then
-        ui.draw_icon(ass, bounds.x + layout.icon_x, center_y, icon,
+        -- an unknown icon name draws as text: keep it inside the icon's slot
+        local clip = node.clip_bounds
+        local slot_x = bounds.x + layout.icon_x
+        ui.draw_icon(ass, slot_x, center_y, icon,
           item.checked and opts.accent_color or "#CAC4D0", layout.icon_size,
-          ui.alpha(opacity), true, node.clip_bounds)
+          ui.alpha(opacity), true, Rect({
+            x = math.max(clip.x, slot_x - dp(14)), y = clip.y,
+            w = dp(28), h = clip.h
+          }))
       end
       local text_x = bounds.x + layout.text_inset
       local trailing = layout.end_inset
@@ -245,6 +254,47 @@ function context_menu.new(services)
     end
     row.modifier.pointer_enabled = node.interactive
     return row
+  end
+
+  -- arrows that page through a panel that doesn't fit the window
+  local function page_button(level, direction)
+    node.page_buttons[level] = node.page_buttons[level] or {}
+    local button = node.page_buttons[level][direction]
+    if button then return button end
+    local function page()
+      scroll(level, direction * math.max(1, (node.visible[level] or 2) - 1))
+    end
+    button = {
+      modifier = Modifier():fillMaxWidth():height(page_button_h):clickable({
+        name = "context-menu-scrollbar-" .. level .. "-" .. direction,
+        on_click = page,
+        on_scroll_up = function() scroll(level, -1) end,
+        on_scroll_down = function() scroll(level, 1) end
+      })
+    }
+    function button:measure(parent)
+      return ui.apply_modifier_size(self.modifier, {w = 0, h = page_button_h},
+        parent)
+    end
+    function button:draw(ass, bounds)
+      local layout = node.levels[level]
+      if not layout then return end
+      local position = state.scrolls[level] or 0
+      local enabled = direction < 0 and position > 0 or
+        direction > 0 and position < layout.max_scroll
+      local opacity = node.content_opacity * self.opacity
+      if enabled and node.interactive and ui.mouse_in(bounds) then
+        ui.draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2,
+          bounds.h / 2, "#FFFFFF", ui.alpha(opacity * 0.15), true,
+          node.clip_bounds)
+      end
+      ui.draw_icon(ass, bounds.x + bounds.w / 2, bounds.y + bounds.h / 2,
+        direction < 0 and "keyboard_arrow_up" or "keyboard_arrow_down",
+        "#CAC4D0", layout.icon_size, ui.alpha(opacity * (enabled and 1 or 0.4)),
+        true, node.clip_bounds)
+    end
+    node.page_buttons[level][direction] = button
+    return button
   end
 
   local function panel_at(level)
@@ -286,11 +336,26 @@ function context_menu.new(services)
 
     local y, row_index = bounds.y + padding, 1
     local bottom = bounds.y2 - padding
+    if layout.max_scroll > 0 then
+      local up, down = page_button(level, -1), page_button(level, 1)
+      up.opacity, down.opacity = content_opacity, content_opacity
+      up.modifier.pointer_enabled = node.interactive
+      down.modifier.pointer_enabled = node.interactive
+      local width = bounds.w - padding * 2
+      draw_node(up, ass, Rect({
+        x = bounds.x + padding, y = y, w = width, h = page_button_h}))
+      draw_node(down, ass, Rect({
+        x = bounds.x + padding, y = bottom - page_button_h,
+        w = width, h = page_button_h}))
+      y, bottom = y + page_button_h, bottom - page_button_h
+    end
+    local visible = 0
     local first = (state.scrolls[level] or 0) + 1
     for item_index = first, #layout.items do
       local item = layout.items[item_index]
       local height = item.separator and separator_h or layout.row_h
       if y + height > bottom + 0.5 then break end
+      visible = visible + 1
       if item.separator then
         ui.draw_box(ass, bounds.x + padding + dp(4), y,
           bounds.x2 - padding - dp(4), y + separator_h,
@@ -308,70 +373,31 @@ function context_menu.new(services)
         }))
         row_index = row_index + 1
       end
-      y = y + height + (item.separator and layout.separator_gap or gap)
+      y = y + height + gap
     end
+    node.visible[level] = visible
     for index = row_index, #(node.rows[level] or {}) do
       node.rows[level][index].item = nil
-    end
-
-    if layout.max_scroll > 0 then
-      local track_h = bounds.h - padding * 2
-      local visible = math.max(0.1, 1 - layout.max_scroll / #layout.items)
-      local thumb_h = math.max(dp(20), track_h * visible)
-      local thumb_y = bounds.y + padding +
-        (track_h - thumb_h) * (state.scrolls[level] or 0) / layout.max_scroll
-      ui.draw_box(ass, bounds.x2 - dp(4), thumb_y, bounds.x2 - dp(1.5),
-        thumb_y + thumb_h, dp(1.25), "#FFFFFF",
-        ui.alpha(node.content_opacity * content_opacity * 0.3), true, bounds)
     end
   end
 
   -- items and layout --------------------------------------------------------
 
-  local function input_conf_enabled()
-    return opts.context_menu_items == "input_conf" and menu_items and
-      menu_items:available()
-  end
-
-  local function input_conf_items(path)
-    local entries = menu_items:level(path)
-    if not entries or #entries == 0 then return nil end
-    local items = {}
-    for _, entry in ipairs(entries) do
-      if entry.separator then
-        items[#items + 1] = entry
-      else
-        local item = {
-          label = entry.label, shortcut = entry.shortcut,
-          checked = entry.checked, disabled = entry.disabled,
-          submenu = entry.submenu_index ~= nil,
-          submenu_index = entry.submenu_index
-        }
-        if not item.submenu and entry.command and entry.command ~= "" then
-          item.action = function() mp.command(entry.command) end
-        end
-        items[#items + 1] = item
-      end
-    end
-    return items
-  end
-
-  -- compact: the dense layout of the input.conf menu; otherwise material's
-  -- own menu metrics
-  local function measure_level(items, compact)
+  local function measure_level(items)
     local layout = {
-      items = items, has_icons = not compact, max_scroll = 0,
-      padding = dp(compact and 6 or 8), gap = dp(compact and 0 or 4),
-      separator_gap = dp(compact and 4 or 4),
-      text_size = compact and 18 or 20, shortcut_size = compact and 15 or 17,
-      icon_size = compact and 19 or 22, icon_x = dp(compact and 18 or 22),
-      end_inset = dp(compact and 12 or 14)
+      items = items, has_icons = false, max_scroll = 0,
+      padding = dp(8), gap = dp(2),
+      text_size = 19, shortcut_size = 16,
+      icon_size = 21, icon_x = dp(20), end_inset = dp(12)
     }
     local widest = 0
-    for _, item in ipairs(items) do
+    for index, item in ipairs(items) do
+      if index > MEASURED_ROWS then break end
       if item.icon or item.checked then layout.has_icons = true end
       if not item.separator then
-        local width = ui.text_width(item.label or "", layout.text_size)
+        -- measured with even digits so a running timestamp doesn't resize it
+        local width = ui.text_width((item.label or ""):gsub("%d", "0"),
+          layout.text_size)
         if item.shortcut and item.shortcut ~= "" then
           width = width + ui.text_width(item.shortcut, layout.shortcut_size) +
             dp(14)
@@ -380,17 +406,13 @@ function context_menu.new(services)
         widest = math.max(widest, width)
       end
     end
-    layout.text_inset = layout.has_icons and dp(compact and 38 or 46) or
-      dp(compact and 14 or 16)
+    layout.text_inset = dp(layout.has_icons and 42 or 14)
     local viewport = services.state.viewport
+    layout.viewport_w, layout.viewport_h = viewport.w, viewport.h
     local max_w = math.max(dp(160), viewport.w - dp(16))
-    if compact then
-      local chrome = layout.padding * 2 + layout.text_inset +
-        layout.end_inset + dp(8)
-      layout.w = math.min(max_w, clamp(widest + chrome, dp(180), dp(400)))
-    else
-      layout.w = math.max(dp(220), math.min(dp(330), max_w))
-    end
+    local chrome = layout.padding * 2 + layout.text_inset +
+      layout.end_inset + dp(8)
+    layout.w = math.min(max_w, clamp(widest + chrome, dp(200), dp(400)))
 
     local rows, separators = 0, 0
     for _, item in ipairs(items) do
@@ -398,50 +420,42 @@ function context_menu.new(services)
       else rows = rows + 1 end
     end
     local available_h = math.max(dp(32), viewport.h - dp(16))
-    local gaps = 0
-    for index = 1, #items - 1 do
-      gaps = gaps + (items[index].separator and layout.separator_gap or layout.gap)
-    end
-    local fixed = layout.padding * 2 + separators * separator_h + gaps
-    -- shrink rows to fit (down to 28dp), then scroll whatever still overflows
-    layout.row_h = math.min(dp(compact and 32 or 42),
-      math.max(dp(compact and 28 or 32), (available_h - fixed) / math.max(1, rows)))
+    local fixed = layout.padding * 2 + separators * separator_h +
+      math.max(0, #items - 1) * layout.gap
+    -- shrink rows to fit, then page through whatever still overflows
+    layout.row_h = math.min(dp(36),
+      math.max(dp(28), (available_h - fixed) / math.max(1, rows)))
     local content_h = fixed + rows * layout.row_h
     layout.h = math.min(content_h, available_h)
     if content_h > available_h then
-      local room = available_h - layout.padding * 2
+      local room = available_h - layout.padding * 2 - page_button_h * 2
       local used, first = 0, #items + 1
       for index = #items, 1, -1 do
         local item = items[index]
         local height = (item.separator and separator_h or layout.row_h) +
-          (index < #items and
-            (item.separator and layout.separator_gap or layout.gap) or 0)
+          (index < #items and layout.gap or 0)
         if used + height > room then break end
         used, first = used + height, index
       end
-      layout.max_scroll = math.max(0, first - 1)
+      layout.max_scroll = math.min(#items - 1, first - 1)
     end
     return layout
   end
 
   local function layout_levels(snapshot)
     local levels = {}
-    if input_conf_enabled() then
-      for level = 1, #state.path + 1 do
-        local items = input_conf_items(prefix(level - 1))
-        if not items then
-          -- the submenu disappeared (menu data changed): close from here
-          for index = #state.path, math.max(1, level - 1), -1 do
-            state.path[index] = nil
-          end
-          break
-        end
-        levels[level] = measure_level(items, true)
+    local viewport = services.state.viewport
+    for level = 1, #state.path + 1 do
+      local items = menu_items:level(prefix(level - 1), snapshot)
+      if not items or #items == 0 then
+        -- the submenu disappeared (menu data changed): close from here
+        for index = #state.path, level - 1, -1 do state.path[index] = nil end
+        break
       end
-    end
-    if not levels[1] then
-      state.path = {}
-      levels[1] = measure_level(actions:items(snapshot), false)
+      local previous = node.levels[level]
+      levels[level] = previous and previous.items == items and
+        previous.viewport_w == viewport.w and
+        previous.viewport_h == viewport.h and previous or measure_level(items)
     end
     for level, layout in ipairs(levels) do
       state.scrolls[level] = clamp(state.scrolls[level] or 0, 0, layout.max_scroll)
@@ -481,6 +495,7 @@ function context_menu.new(services)
       cancel_hover()
       state.path, state.scrolls = {}, {}
       self.opened = {}
+      menu_items:reload()
       refresh_items = true
     elseif not state.open and self.was_open then
       cancel_hover()
@@ -539,9 +554,7 @@ function context_menu.new(services)
 
     -- root panel morphs open from the click point
     self.anchors = {}
-    local compact = self.levels[1].padding < dp(8)
-    local root_radius = compact and (dp(10) + dp(8) * self.morph) or
-      (dp(14) + dp(14) * self.morph)
+    local root_radius = dp(14) + dp(14) * self.morph
     local shell_opacity = state.open and
       (0.53 + self.morph * 0.39) or self.morph * 0.92
     draw_level(ass, 1, surface, root_radius, shell_opacity, 1)
@@ -583,7 +596,7 @@ function context_menu.new(services)
         w = w,
         h = start_h + (layout.h - start_h) * progress
       })
-      local radius = dp(10) + dp(8) * progress
+      local radius = dp(14) + dp(14) * progress
       local content = clamp((progress - 0.35) / 0.65, 0, 1)
       draw_level(ass, level, rect, radius,
         0.92 * self.content_opacity * clamp(progress * 1.6, 0, 1), content)

@@ -22,5 +22,6 @@ The resulting layout should look like this:
 │   └── thumbfast.lua
 └── 📁 script-opts (optional)
     ├── material-osc.conf
+    ├── material-osc-menu.conf
     └── thumbfast.conf
 ```

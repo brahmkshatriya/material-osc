@@ -20,7 +20,6 @@ SYMBOL_FONT = "MaterialSymbolsRoundedUnfilled.ttf"
 TEXT_FONT = "GoogleSansFlex.ttf"
 OUTPUT_SYMBOL_FONT = "material-osc_icons.otf"
 OUTPUT_TEXT_FONT = "material-osc_google_sans_flex.ttf"
-LUA_STRING = re.compile(r'''["']([a-z][a-z0-9_]*(?:\.[a-z0-9_]+)?)["']''')
 LUA_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 LUA_NUMBER = re.compile(
     r"""
@@ -212,33 +211,19 @@ def embed_version(bundle: str, version: str) -> str:
     return bundle.replace(marker, lua_version)
 
 
-def subset_symbol_font(source_dir: Path, source_font: Path, output_font: Path) -> int:
-    """Keep only Material Symbol ligatures referenced by the Lua sources."""
+def build_symbol_font(source_font: Path, output_font: Path) -> int:
+    """Keep every Material Symbol, since the context menu can use any of them."""
     try:
         from fontTools import subset
         from fontTools.ttLib import TTFont
     except ImportError as error:
         raise RuntimeError(
-            "FontTools is required to build the icon subset. "
+            "FontTools is required to build the icon font. "
             "Install build dependencies with: pip install -r requirements-build.txt"
         ) from error
 
     font = TTFont(source_font)
-    glyph_order = set(font.getGlyphOrder())
-    candidates: set[str] = set()
-    for lua_file in source_dir.rglob("*.lua"):
-        candidates.update(LUA_STRING.findall(lua_file.read_text(encoding="utf-8")))
-    icons = sorted(candidates & glyph_order)
-    if not icons:
-        raise RuntimeError("No Material Symbol icon names were found in the Lua sources")
-
-    best_cmap = font.getBestCmap() or {}
-    glyphs = set(icons)
-    for icon in icons:
-        for character in icon:
-            glyph = best_cmap.get(ord(character))
-            if glyph:
-                glyphs.add(glyph)
+    glyphs = set(font.getGlyphOrder())
 
     options = subset.Options()
     options.layout_features = ["rlig"]
@@ -255,7 +240,7 @@ def subset_symbol_font(source_dir: Path, source_font: Path, output_font: Path) -
     subsetter.subset(font)
     output_font.parent.mkdir(parents=True, exist_ok=True)
     font.save(output_font)
-    return len(icons)
+    return len(glyphs)
 
 
 def optimize_text_font(source_font: Path, output_font: Path) -> tuple[int, int]:
@@ -280,7 +265,7 @@ def optimize_text_font(source_font: Path, output_font: Path) -> tuple[int, int]:
     return source_font.stat().st_size, output_font.stat().st_size
 
 
-def build_fonts(source_dir: Path, destination_fonts: Path) -> tuple[int, int, int, int, int]:
+def build_fonts(destination_fonts: Path) -> tuple[int, int, int, int, int]:
     if destination_fonts.exists():
         shutil.rmtree(destination_fonts)
     destination_fonts.mkdir(parents=True)
@@ -289,7 +274,7 @@ def build_fonts(source_dir: Path, destination_fonts: Path) -> tuple[int, int, in
     if not source_symbol_font.is_file():
         raise FileNotFoundError(f"Material Symbols source font not found: {source_symbol_font}")
     output_symbol_font = destination_fonts / OUTPUT_SYMBOL_FONT
-    icon_count = subset_symbol_font(source_dir, source_symbol_font, output_symbol_font)
+    icon_count = build_symbol_font(source_symbol_font, output_symbol_font)
 
     source_text_font = FONTS_DIR / TEXT_FONT
     if not source_text_font.is_file():
@@ -349,7 +334,7 @@ def main() -> None:
         subset_font_size,
         text_source_size,
         text_output_size,
-    ) = build_fonts(source_dir, destination / "fonts")
+    ) = build_fonts(destination / "fonts")
     print(
         f"Built material-osc {args.version} with {module_count} modules and "
         f"{icon_count} icons in {destination}"
@@ -359,7 +344,7 @@ def main() -> None:
         f"{minified_size // 1024} KiB"
     )
     print(
-        f"Subset {SYMBOL_FONT}: {source_font_size // 1024} KiB -> "
+        f"Built {SYMBOL_FONT}: {source_font_size // 1024} KiB -> "
         f"{subset_font_size // 1024} KiB"
     )
     print(

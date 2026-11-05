@@ -3,8 +3,10 @@
 local menu_items = {}
 
 function menu_items.new(args)
-  local builder = args.builder
+  local mp, msg = args.mp, args.msg
+  local builder, actions = args.builder, args.actions
   local service = {}
+  local warned, cached = {}, {}
 
   local function has_state(entry, name)
     for _, value in ipairs(entry.state or {}) do
@@ -20,27 +22,58 @@ function menu_items.new(args)
     return label or title, shortcut
   end
 
-  function service:available()
-    local items = builder:tree()
-    return type(items) == "table" and #items > 0
+  local function convert(entry, snapshot)
+    local label, shortcut = split_title(entry.title)
+    if entry.builtin then
+      local builtin, known = actions:builtin(entry.builtin, snapshot)
+      if not known and not warned[entry.builtin] then
+        warned[entry.builtin] = true
+        msg.warn("menu: unknown item @" .. entry.builtin)
+      end
+      return builtin and {
+        label = label ~= "" and label or builtin.label,
+        icon = entry.icon or builtin.icon,
+        action = builtin.action
+      }
+    end
+    local is_submenu = entry.type == "submenu"
+    local command = entry.cmd
+    return {
+      label = label,
+      icon = entry.icon,
+      shortcut = shortcut or entry.shortcut,
+      submenu = is_submenu,
+      submenu_index = nil,
+      checked = has_state(entry, "checked"),
+      disabled = has_state(entry, "disabled") or
+        (is_submenu and (type(entry.submenu) ~= "table" or #entry.submenu == 0)),
+      action = not is_submenu and command and command ~= "" and
+        function() mp.command(command) end or nil
+    }
   end
 
-  -- Returns the entries at path (a list of submenu indexes) converted to
-  -- plain tables, plus the titles of the submenus along the path.
-  function service:level(path)
+  function service:reload()
+    builder:reload()
+  end
+
+  -- Returns the rows at path (a list of submenu indexes), or nil when that
+  -- submenu no longer exists. The last item of the root is always Customize.
+  function service:level(path, snapshot)
     local entries = builder:tree()
-    if type(entries) ~= "table" then return nil end
-    local titles = {}
-    for _, index in ipairs(path or {}) do
+    for _, index in ipairs(path) do
       local entry = entries[index]
       if type(entry) ~= "table" or type(entry.submenu) ~= "table" then
         return nil
       end
-      titles[#titles + 1] = (split_title(entry.title))
       entries = entry.submenu
     end
 
-    local items = {}
+    -- long lists are only converted again when the menu changed
+    local key = table.concat(path, "/")
+    local saved = cached[key]
+    if saved and saved.generation == builder.generation then return saved.items end
+
+    local items, has_builtin = {}, false
     for index, entry in ipairs(entries) do
       if type(entry) == "table" and not has_state(entry, "hidden") then
         if entry.type == "separator" then
@@ -49,23 +82,22 @@ function menu_items.new(args)
             items[#items + 1] = {separator = true}
           end
         else
-          local label, shortcut = split_title(entry.title)
-          local is_submenu = entry.type == "submenu"
-          items[#items + 1] = {
-            label = label,
-            shortcut = shortcut,
-            command = entry.cmd,
-            submenu_index = is_submenu and index or nil,
-            checked = has_state(entry, "checked"),
-            disabled = has_state(entry, "disabled") or
-              (is_submenu and (type(entry.submenu) ~= "table" or
-                #entry.submenu == 0))
-          }
+          has_builtin = has_builtin or entry.builtin ~= nil
+          local item = convert(entry, snapshot)
+          if item then
+            if item.submenu then item.submenu_index = index end
+            items[#items + 1] = item
+          end
         end
       end
     end
     if #items > 0 and items[#items].separator then items[#items] = nil end
-    return items, titles
+    if #path == 0 then
+      items[#items + 1] = actions:builtin("customize", snapshot)
+    elseif not has_builtin then
+      cached[key] = {generation = builder.generation, items = items}
+    end
+    return items
   end
 
   return service

@@ -944,11 +944,14 @@ local services = {
   context_actions = context_actions,
   menu_items = (function()
     local builder = require("src.services.menu_builder").new({
-      mp = mp, utils = utils, msg = msg, opts = opts
+      mp = mp, utils = utils, msg = msg,
+      format_key = keybinding_hints_module.label
     })
-    -- read input.conf and announce the menu to other scripts right away
-    if opts.context_menu_items == "input_conf" then builder:start() end
-    return require("src.services.menu_items").new({builder = builder})
+    -- read the menu and announce it to other scripts right away
+    builder:start()
+    return require("src.services.menu_items").new({
+      mp = mp, msg = msg, builder = builder, actions = context_actions
+    })
   end)(),
   precise_seek = precise.seek,
   sponsorblock = sponsorblock_service,

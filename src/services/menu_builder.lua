@@ -1,25 +1,56 @@
--- Builds the right-click menu from "#menu:" comments in input.conf:
+-- Builds the context menu from material-osc-menu.conf, or from the default menu
+-- below until that file exists. See DEFAULT_CONTENTS for the format.
 --
---   s       screenshot     #menu: Video > Take Screenshot
---   _       ignore         #menu: Video > -
---   _       ignore         #menu: Tracks #@tracks
---   Space   cycle pause    #menu: Pause #@state=(pause and 'checked')
---
--- " > " nests submenus, "-" is a separator and the key (unless "_") is shown
--- as the shortcut. "#@" tags make an entry dynamic:
---   tracks, tracks/video, tracks/audio, tracks/sub, tracks/sub-secondary,
---   chapters, editions, playlist, audio-devices, profiles
---                     turn the entry into a generated submenu
---   state=<lua expr>  evaluated against mpv properties (pause, idle_active,
---                     p["sub-visibility"], ...); returns states such as
---                     "checked", "disabled" or "hidden" (comma separated)
---   anything else     a slot other scripts fill: they wait for the
---                     "menu-ready <client>" broadcast and send
---                     "script-message-to <client> update <tag> <json>"
---
--- Items: {title = "Label\tShortcut", cmd, type = nil|"submenu"|"separator",
--- state = {"checked", ...}, submenu = {...}}. Scripts send the same shape.
+-- Items: {title = "Label\tShortcut", icon, cmd, builtin,
+-- type = nil|"submenu"|"separator", state = {"checked", ...}, submenu = {...}}.
+-- Other scripts send the same shape to fill a slot: they wait for the
+-- "menu-ready <client>" broadcast and send
+-- "script-message-to <client> update <tag> <json>".
 local menu_builder = {}
+
+menu_builder.FILE = "material-osc-menu.conf"
+
+menu_builder.DEFAULT_CONTENTS = [[
+# material-osc context menu
+#
+#   Title | icon | command
+#
+# icon is the name of any Material Symbol (fonts.google.com/icons) and can be
+# left empty. " > " nests submenus and "-" adds a separator. Changes apply the
+# next time the menu opens. Customize is always added as the last item.
+#
+#   Screenshot | photo_camera | screenshot
+#   Audio | volume_up
+#   Audio > Mute | | cycle mute #@state=(mute and 'checked')
+#   Audio > -
+#   Audio > Tracks | | #@tracks/audio
+#
+# #@ tags make an item dynamic:
+#   #@tracks, #@tracks/video, #@tracks/audio, #@tracks/sub,
+#   #@tracks/sub-secondary, #@chapters, #@editions, #@playlist,
+#   #@audio-devices, #@profiles    list those as a submenu
+#   #@state=<expression>           a Lua expression returning checked, disabled
+#                                  or hidden; names read mpv properties
+#   #@<anything else>              a slot other scripts can fill
+#
+# @ items are material-osc's own actions. They change with the media and can be
+# renamed or get another icon: Save | star | @add-bookmark
+
+@copy-subtitle
+@copy-timestamp
+@copy-media
+-
+@ab-loop
+@add-bookmark
+-
+@media-information
+@open-media
+-
+@keybindings
+]]
+
+-- long track, chapter and playlist titles are cut at this many characters
+local MAX_TITLE_LENGTH = 80
 
 local DYNAMIC_SUBMENUS = {
   ["tracks"] = true, ["tracks/video"] = true, ["tracks/audio"] = true,
@@ -61,12 +92,13 @@ end
 
 function menu_builder.new(args)
   local mp, utils, msg = args.mp, args.utils, args.msg
-  local opts = args.opts or {}
-  local service = {started = false}
+  local service = {started = false, generation = 0}
 
-  local root = {}         -- static tree parsed from input.conf
+  local root = {}         -- static tree parsed from the menu file
   local tagged = {}       -- {item = <item in root>, original = {...}, tags = {...}}
   local by_tag = {}       -- tag -> tagged entry (entry.override: "update" data)
+  local overrides = {}    -- tag -> "update" data, kept when the file is reloaded
+  local contents = nil    -- the text root was parsed from
   local compiled = {}     -- state expression -> function
   local observed = {}     -- property name -> true
   local dirty = true
@@ -84,14 +116,10 @@ function menu_builder.new(args)
     return value
   end
 
-  local function max_title_length()
-    return tonumber(opts.menu_max_title_length) or 80
-  end
-
   local function shorten(value)
     value = tostring(value or "")
-    local limit = max_title_length()
-    if limit <= 0 or #value <= limit then return value end
+    local limit = MAX_TITLE_LENGTH
+    if #value <= limit then return value end
     -- cut on a UTF-8 character boundary
     local count = 0
     for position in value:gmatch("()[%z\1-\127\194-\244][\128-\191]*") do
@@ -101,21 +129,15 @@ function menu_builder.new(args)
     return value
   end
 
-  -- input.conf ---------------------------------------------------------------
+  -- menu file ----------------------------------------------------------------
 
-  local function read_input_conf()
-    local configured = mp.get_property("input-conf", "") or ""
-    if configured:sub(1, 9) == "memory://" then return configured:sub(10) end
-    if configured == "" then configured = "~~/input.conf" end
-    local path = mp.command_native({"expand-path", configured})
+  local function read_menu_file()
+    local path = mp.find_config_file("script-opts/" .. menu_builder.FILE)
     local file = path and io.open(path, "rb")
-    if not file then
-      msg.verbose("menu: cannot read " .. tostring(path))
-      return nil
-    end
+    if not file then return menu_builder.DEFAULT_CONTENTS end
     local content = file:read("*a")
     file:close()
-    return content
+    return content or ""
   end
 
   -- "#@a #@state=(x and 'checked')" -> {"a", "state=(x and 'checked')"}
@@ -130,48 +152,64 @@ function menu_builder.new(args)
     return tags
   end
 
+  local function add_tags(item, command)
+    local tags = parse_tags(command)
+    if #tags == 0 then return end
+    local entry = {item = item, original = copy_item(item), tags = tags}
+    tagged[#tagged + 1] = entry
+    for _, tag in ipairs(tags) do
+      if not tag:match("^state=") then
+        local name = tag:match("^%S+")
+        by_tag[name] = entry
+        entry.override = overrides[name] or entry.override
+      end
+    end
+  end
+
   local function parse(content)
     root, tagged, by_tag = {}, {}, {}
-    local submenus = {}
-    for line in content:gmatch("[^\r\n]+") do
-      local key, command = line:match("^%s*([^%s#]%S*)%s+(.-)%s*$")
-      local title = command and command:match("#menu:%s*(.*)$")
-      if title then
-        -- anything after another "#" is a comment or a tag, not the title
-        title = trim(title:match("^(.-)%s*#") or title)
+    local named = {}
+    for line in content:gsub("^\239\187\191", ""):gmatch("[^\r\n]+") do
+      line = trim(line)
+      if line ~= "" and line:sub(1, 1) ~= "#" then
+        local title, icon, command = line:match("^(.-)|(.-)|(.*)$")
+        if not title then title, icon = line:match("^(.-)|(.*)$") end
+        title, icon, command = trim(title or line), trim(icon), trim(command)
+        if icon == "" then icon = nil end
+
         local parts = {}
         for part in (title .. ">"):gmatch("(.-)>") do parts[#parts + 1] = trim(part) end
-        if #parts == 1 and parts[1] == "" then parts = {} end
-
         local target, id = root, ""
         for index, name in ipairs(parts) do
+          id = id .. "\0" .. name
+          local existing = named[id]
           if index < #parts then
-            id = id .. "\0" .. name
-            if not submenus[id] then
-              submenus[id] = {}
-              target[#target + 1] = {type = "submenu", title = name,
-                submenu = submenus[id]}
+            if not existing then
+              existing = {title = name}
+              target[#target + 1] = existing
+              named[id] = existing
             end
-            target = submenus[id]
+            existing.type, existing.cmd = "submenu", nil
+            existing.submenu = existing.submenu or {}
+            target = existing.submenu
           elseif name == "-" then
             target[#target + 1] = {type = "separator"}
+          elseif existing and command == "" then
+            -- "Audio | volume_up" sets the icon of the Audio submenu
+            existing.icon = icon or existing.icon
           else
-            local item = {title = name, cmd = command}
-            if key ~= "_" then item.title = item.title .. "\t" .. key end
-            target[#target + 1] = item
-            local tags = parse_tags(command)
-            if #tags > 0 then
-              local entry = {item = item, original = copy_item(item), tags = tags}
-              tagged[#tagged + 1] = entry
-              for _, tag in ipairs(tags) do
-                -- scripts address an entry by its tag ("cache_cleaner"), also
-                -- when the line has a trailing comment after it
-                if not tag:match("^state=") then
-                  by_tag[tag] = entry
-                  by_tag[tag:match("^%S+")] = entry
-                end
-              end
+            local item_name = name:match("^@[%w-]+$")
+            local builtin = command:match("^@([%w-]+)$") or
+              (item_name and item_name:sub(2))
+            local item = {title = not item_name and name or nil, icon = icon}
+            if builtin then
+              item.builtin = builtin
+            elseif command ~= "" then
+              item.cmd = command
             end
+            target[#target + 1] = item
+            named[id] = named[id] or item
+            if item.cmd then add_tags(item, command) end
           end
         end
       end
@@ -388,30 +426,12 @@ function menu_builder.new(args)
     local items = {}
     local list = read("playlist") or {}
     if #list == 0 then return items end
-    local first, last = 1, #list
-    local limit = tonumber(opts.menu_max_playlist_items) or 20
-    if limit > 0 and #list > limit then
-      local position = tonumber(read("playlist-playing-pos")) or -1
-      if position < 0 then position = tonumber(read("playlist-pos")) or 0 end
-      local before = math.floor(limit / 2)
-      first = position + 1 - before
-      last = first + limit - 1
-      if first < 1 then first, last = 1, limit end
-      if last > #list then first, last = #list - limit + 1, #list end
-    end
-    if first > 1 then
-      items[#items + 1] = {title = "...\t[" .. (first - 1) .. "]", cmd = "ignore"}
-    end
-    for index = first, last do
-      local entry = list[index]
+    for index, entry in ipairs(list) do
       items[#items + 1] = {
         title = playlist_title(entry, index - 1),
         cmd = string.format("playlist-play-index %d", index - 1),
         state = (entry.playing or entry.current) and {"checked"} or {}
       }
-    end
-    if last < #list then
-      items[#items + 1] = {title = "...\t[" .. (#list - last) .. "]", cmd = "ignore"}
     end
     return items
   end
@@ -450,6 +470,7 @@ function menu_builder.new(args)
       item[key] = value
     end
     if (not item.title or item.title == "") then item.title = entry.original.title end
+    item.icon = item.icon or entry.original.icon
 
     for _, tag in ipairs(entry.tags) do
       local expression = tag:match("^state=(.*)$")
@@ -465,19 +486,59 @@ function menu_builder.new(args)
     end
   end
 
+  -- commands are compared without whitespace differences and comments
+  local function normalize_command(command)
+    local text = tostring(command or ""):gsub("%s+#.*$", "")
+    return trim(text:gsub("%s+", " "))
+  end
+
+  -- shows the key already bound to an item's command next to it
+  local function add_shortcuts(items, keys)
+    for _, item in ipairs(items) do
+      if item.submenu then
+        add_shortcuts(item.submenu, keys)
+      elseif item.cmd and not tostring(item.title or ""):find("\t", 1, true) then
+        item.shortcut = keys[normalize_command(item.cmd)]
+      end
+    end
+  end
+
+  local function bound_keys()
+    local keys, priorities = {}, {}
+    for _, binding in ipairs(read("input-bindings") or {}) do
+      local key, command = binding.key, normalize_command(binding.cmd)
+      local priority = tonumber(binding.priority) or 0
+      if key and command ~= "" and command ~= "ignore" and
+        not key:find("MBTN", 1, true) and
+        not key:find("WHEEL", 1, true) and
+        (not priorities[command] or priority > priorities[command]) then
+        priorities[command] = priority
+        keys[command] = args.format_key and args.format_key(key) or key
+      end
+    end
+    return keys
+  end
+
   -- the whole menu, rebuilt only when something it depends on changed
   function service:tree()
     self:start()
     if dirty or not tree then
       dirty = false
       for _, entry in ipairs(tagged) do apply(entry) end
+      add_shortcuts(root, bound_keys())
       tree = root
+      self.generation = self.generation + 1
     end
     return tree
   end
 
-  function service:available()
-    return #root > 0
+  -- picks up edits to the menu file
+  function service:reload()
+    local content = read_menu_file()
+    if content == contents then return end
+    contents = content
+    parse(content)
+    mark_dirty()
   end
 
   -- messaging API for other scripts --------------------------------------------
@@ -489,9 +550,7 @@ function menu_builder.new(args)
   function service:start()
     if self.started then return end
     self.started = true
-    local content = read_input_conf()
-    if content then parse(content) end
-    dirty = true
+    self:reload()
 
     -- "get <tag> <client>": reply with the current item for that tag
     mp.register_script_message("get", function(tag, client)
@@ -518,6 +577,7 @@ function menu_builder.new(args)
       end
       if not data.type or data.type == "" then data.type = entry.original.type end
       entry.override = data
+      overrides[tag] = data
       mark_dirty()
     end)
 

@@ -18,7 +18,7 @@ https://github.com/user-attachments/assets/65046da7-7d9e-4492-9e93-47650b8fc484
 ## Configuration
 
 material-osc can be customized with a `material-osc.conf` file in mpv's
-`script-opts` directory. You can also open file from **Right-click → Configurations**.
+`script-opts` directory. You can also open file from **Right-click → Customize**.
 
 <details>
 <summary>Appearance and controls</summary>
@@ -31,9 +31,6 @@ material-osc can be customized with a `material-osc.conf` file in mpv's
 | `vidscale_min` | `0.35` | `0.1`–`1` | Smallest scale factor `vidscale` can reach. |
 | `accent_color` | `"#00bbff"` | Quoted six-digit RGB color | Sets the seekbar, selections, toggles, and other highlighted elements. |
 | `context_menu` | `yes` | `yes`, `no` | Enables the material-osc context menu. When disabled, right-click and menu-key bindings remain available to mpv and other scripts. |
-| `context_menu_items` | `material` | `material`, `input_conf` | Chooses the context menu's items: material-osc's own menu, or one built from `input.conf`. See [Context menu from input.conf](#context-menu-from-inputconf). |
-| `menu_max_title_length` | `80` | Characters; `0` disables the limit | With `context_menu_items=input_conf`, shortens long track, chapter and playlist titles. |
-| `menu_max_playlist_items` | `20` | Items; `0` disables the limit | With `context_menu_items=input_conf`, limits how many playlist entries the `#@playlist` submenu shows around the current one. |
 | `tooltip` | `yes` | `yes`, `no` | Enables tooltips for controls. |
 | `show_mini_seekbar` | `no` | `yes`, `no` | Keeps a 1dp playback-progress line at the bottom while the main controls are hidden. |
 | `show_empty_screen` | `yes` | `yes`, `no` | Shows the material-osc welcome screen when the playlist is empty. Set to `no` to leave the empty player unobstructed. |
@@ -203,23 +200,33 @@ A filmstrip of thumbnails replaces the control row for local files. Drag it
 like film or click a thumbnail to jump there. Thumbnails are generated with
 `ffmpeg` when it is installed and with mpv otherwise.
 
-### Context menu from input.conf
+### Customizing the context menu
 
-With `context_menu_items=input_conf`, the context menu is built from `#menu:`
-comments in `input.conf`. If `input.conf` has none, material-osc's own menu is
-used.
+**Right-click → Customize** opens `material-osc.conf` and
+`material-osc-menu.conf` from mpv's `script-opts` directory. The menu file is
+created with the default menu and changes apply the next time the menu opens.
+Customize itself is always the last item.
 
 ```conf
-s      screenshot    #menu: Video > Take Screenshot
-_      ignore        #menu: Video > -
-_      ignore        #menu: Video > Tracks #@tracks/video
-_      ignore        #menu: Tracks #@tracks
-SPACE  cycle pause   #menu: Pause #@state=(pause and 'checked')
+Screenshot | photo_camera | screenshot
+Audio | volume_up
+Audio > Mute | | cycle mute #@state=(mute and 'checked')
+Audio > -
+Audio > Tracks | | #@tracks/audio
+-
+Save | star | @add-bookmark
+@keybindings
 ```
 
-` > ` nests submenus, `-` adds a separator, and the key is shown next to the
-item (use `_` for no key). Submenus open on hover, on click or with the arrow
-keys. A menu that doesn't fit the window scrolls.
+Each line is `Title | icon | command`. The icon is the name of any
+[Material Symbol](https://fonts.google.com/icons) and can be left empty. ` > `
+nests submenus and `-` adds a separator. A key bound to the same command is shown
+next to the item. Menus that don't fit the window get arrows to page through them.
+
+`@` items are material-osc's own actions, which change with the media:
+`@copy-subtitle`, `@copy-timestamp`, `@copy-media`, `@ab-loop`, `@add-bookmark`,
+`@media-information`, `@open-media` and `@keybindings`. They can be renamed or get
+another icon, like `Save` above.
 
 `#@` tags make an entry dynamic:
 
@@ -247,7 +254,7 @@ always preserved.
 ## Building
 
 The repository keeps the complete Material Symbols Rounded TTF for development.
-Release builds automatically subset it to the icons referenced by the Lua sources.
+Release builds keep every icon, since the context menu can use any of them.
 The generated archive places renamed fonts under `fonts/` and the minified,
 bundled Lua script under `scripts/`. The brand mark is implemented as a bundled
 ASS drawing, so the archive is ready to extract into the mpv configuration
