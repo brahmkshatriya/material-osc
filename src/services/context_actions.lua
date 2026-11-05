@@ -1,5 +1,6 @@
 local context_actions = {}
 local config_schema = require "src.config.schema"
+local menu_builder = require "src.services.menu_builder"
 local windows_command = require "src.platform.windows_command"
 
 function context_actions.new(args)
@@ -165,12 +166,12 @@ function context_actions.new(args)
     mp.commandv("script-binding", "select/select-binding")
   end
 
-  function service:open_configurations()
+  local function script_opts_path(name)
     local config_dir = mp.command_native({"expand-path", "~~home/script-opts"})
     if not config_dir or config_dir == "" then
       args.toast:error(
         "mpv configuration directory is unavailable", {duration = 2})
-      return
+      return nil
     end
     local ready, reason = filesystem:ensure_directory(config_dir)
     if not ready then
@@ -180,11 +181,14 @@ function context_actions.new(args)
       end
       args.toast:error(
         "Could not create script-opts directory", {duration = 2})
-      return
+      return nil
     end
+    return filesystem:normalize(filesystem:join(config_dir, name))
+  end
 
-    local config_path = filesystem:normalize(
-      filesystem:join(config_dir, "material-osc.conf"))
+  function service:open_configurations()
+    local config_path = script_opts_path("material-osc.conf")
+    if not config_path then return end
     local existing = filesystem:read(config_path) or ""
     local contents, changed =
       config_schema.render_configuration(existing, args.opts)
@@ -195,55 +199,86 @@ function context_actions.new(args)
     launch(config_path, false)
   end
 
-  function service:items(snapshot)
-    local items = {}
-    local function item(label, icon, action)
-      items[#items + 1] = {label = label, icon = icon, action = action}
+  function service:open_menu_file()
+    local menu_path = script_opts_path(menu_builder.FILE)
+    if not menu_path then return end
+    if not filesystem:read(menu_path) and
+      not filesystem:write_atomic(menu_path, menu_builder.DEFAULT_CONTENTS) then
+      args.toast:error("Could not create " .. menu_builder.FILE, {duration = 2})
+      return
     end
-    local function separator() items[#items + 1] = {separator = true} end
-    local function add_settings_items()
-      item("Keybindings", "keyboard", function() self:open_keybindings() end)
-      item("Configurations", "settings",
-        function() self:open_configurations() end)
-    end
-    if (snapshot.playlist_count or 0) == 0 then
-      add_settings_items()
-      return items
-    end
+    launch(menu_path, false)
+  end
 
-    local network = snapshot.network or is_url(media_path())
-    if type(snapshot.subtitle_text) == "string" and
-      snapshot.subtitle_text:match("%S") then
-      item("Copy Subtitle Text", "subtitles", function()
-        self:copy_subtitle(snapshot)
-      end)
+  -- material-osc's own menu items, the "@name" entries of the menu file
+  local builtins = {
+    ["copy-subtitle"] = function(snapshot)
+      if type(snapshot.subtitle_text) ~= "string" or
+        not snapshot.subtitle_text:match("%S") then return nil end
+      return "Copy Subtitle Text", "subtitles",
+        function() service:copy_subtitle(snapshot) end
+    end,
+    ["copy-timestamp"] = function(snapshot, network)
+      local timestamp = args.format_time(snapshot.position or 0)
+      return network and ("Share at " .. timestamp) or
+        ("Copy Timestamp · " .. timestamp), "schedule",
+        function() service:copy_timestamp(snapshot) end
+    end,
+    ["copy-media"] = function(snapshot, network)
+      return network and "Share" or "Copy Media Path", "link",
+        function() service:copy_media(snapshot) end
+    end,
+    ["ab-loop"] = function(snapshot)
+      return not snapshot.ab_loop_a and "Set A–B Loop Start" or
+        (not snapshot.ab_loop_b and "Set A–B Loop End" or "Clear A–B Loop"),
+        "repeat", function() service:cycle_ab_loop() end
+    end,
+    ["add-bookmark"] = function()
+      return "Add Bookmark", "bookmark_add",
+        function() service:add_bookmark() end
+    end,
+    ["media-information"] = function()
+      local open = media_information_visible()
+      return open and "Hide Media Information" or "Media Information",
+        open and "visibility_off" or "info",
+        function() service:show_media_information() end
+    end,
+    ["open-media"] = function(snapshot, network)
+      return network and "Open in Browser" or "Reveal in File Manager",
+        network and "open_in_new" or "folder_open",
+        function() service:open_media(snapshot) end
     end
-    local timestamp = args.format_time(snapshot.position or 0)
-    item(network and ("Share at " .. timestamp) or
-      ("Copy Timestamp · " .. timestamp), "schedule", function()
-        self:copy_timestamp(snapshot)
-      end)
-    item(network and "Share" or "Copy Media Path", "link", function()
-      self:copy_media(snapshot)
-    end)
-    separator()
-    local loop_label = not snapshot.ab_loop_a and "Set A–B Loop Start" or
-      (not snapshot.ab_loop_b and "Set A–B Loop End" or "Clear A–B Loop")
-    item(loop_label, "repeat", function() self:cycle_ab_loop() end)
-    item("Add Bookmark", "bookmark_add", function() self:add_bookmark() end)
-    separator()
-    local media_information_open = media_information_visible()
-    item(media_information_open and "Hide Media Information" or
-      "Media Information",
-      media_information_open and "visibility_off" or "info",
-      function() self:show_media_information() end)
-    item(network and "Open in Browser" or "Reveal in File Manager",
-      network and "open_in_new" or "folder_open", function()
-        self:open_media(snapshot)
-      end)
-    separator()
-    add_settings_items()
-    return items
+  }
+  local always_available = {
+    keybindings = function()
+      return "Keybindings", "keyboard", function() service:open_keybindings() end
+    end,
+    customize = function()
+      return "Customize", "settings", function()
+        service:open_configurations()
+        service:open_menu_file()
+      end
+    end
+  }
+
+  local network_snapshot, network
+
+  -- Returns the item, which is nil when it doesn't apply to the current media,
+  -- and whether that name exists at all.
+  function service:builtin(name, snapshot)
+    local build = always_available[name]
+    if not build then
+      build = builtins[name]
+      if not build then return nil, false end
+      if (snapshot.playlist_count or 0) == 0 then return nil, true end
+    end
+    if network_snapshot ~= snapshot then
+      network_snapshot = snapshot
+      network = snapshot.network or is_url(media_path())
+    end
+    local label, icon, action = build(snapshot, network)
+    if not label then return nil, true end
+    return {label = label, icon = icon, action = action}, true
   end
 
   return service

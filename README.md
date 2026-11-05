@@ -18,7 +18,7 @@ https://github.com/user-attachments/assets/65046da7-7d9e-4492-9e93-47650b8fc484
 ## Configuration
 
 material-osc can be customized with a `material-osc.conf` file in mpv's
-`script-opts` directory. You can also open file from **Right-click → Configurations**.
+`script-opts` directory. You can also open file from **Right-click → Customize**.
 
 <details>
 <summary>Appearance and controls</summary>
@@ -200,6 +200,49 @@ A filmstrip of thumbnails replaces the control row for local files. Drag it
 like film or click a thumbnail to jump there. Thumbnails are generated with
 `ffmpeg` when it is installed and with mpv otherwise.
 
+### Customizing the context menu
+
+**Right-click → Customize** opens `material-osc.conf` and
+`material-osc-menu.conf` from mpv's `script-opts` directory. The menu file is
+created with the default menu and changes apply the next time the menu opens.
+Customize itself is always the last item.
+
+```conf
+Screenshot | photo_camera | screenshot
+Audio | volume_up
+Audio > Mute | | cycle mute #@state=(mute and 'checked')
+Audio > -
+Audio > Tracks | | #@tracks/audio
+-
+Save | star | @add-bookmark
+@keybindings
+```
+
+Each line is `Title | icon | command`. The icon is the name of any
+[Material Symbol](https://fonts.google.com/icons) and can be left empty. ` > `
+nests submenus and `-` adds a separator. A key bound to the same command is shown
+next to the item. Menus that don't fit the window get arrows to page through them.
+
+`@` items are material-osc's own actions, which change with the media:
+`@copy-subtitle`, `@copy-timestamp`, `@copy-media`, `@ab-loop`, `@add-bookmark`,
+`@media-information`, `@open-media` and `@keybindings`. They can be renamed or get
+another icon, like `Save` above.
+
+`#@` tags make an entry dynamic:
+
+| Tag | Effect |
+| --- | --- |
+| `#@tracks`, `#@tracks/video`, `#@tracks/audio`, `#@tracks/sub`, `#@tracks/sub-secondary` | Lists the tracks |
+| `#@chapters`, `#@editions`, `#@playlist`, `#@audio-devices`, `#@profiles` | Lists the chapters, editions, playlist entries, audio devices or profiles |
+| `#@state=<expression>` | A Lua expression returning `checked`, `disabled` or `hidden` (comma separated). Names read mpv properties (`pause`, `idle_active`, `p["sub-visibility"]`) |
+| `#@<anything else>` | A slot other scripts can fill |
+
+Scripts wait for the `menu-ready <client>` broadcast and fill a slot with
+`script-message-to <client> update <tag> <json>`, where the JSON is an item such
+as `{"title": "Label\tHint", "cmd": "...", "type": "submenu", "submenu": [...]}`.
+`script-message-to <client> get <tag> <client-name>` replies with the current
+item as `menu-get-reply`.
+
 ### Optional media-title parsing
 
 If the Python [`guessit`](https://github.com/guessit-io/guessit) package is
@@ -211,7 +254,7 @@ always preserved.
 ## Building
 
 The repository keeps the complete Material Symbols Rounded TTF for development.
-Release builds automatically subset it to the icons referenced by the Lua sources.
+Release builds keep every icon, since the context menu can use any of them.
 The generated archive places renamed fonts under `fonts/` and the minified,
 bundled Lua script under `scripts/`. The brand mark is implemented as a bundled
 ASS drawing, so the archive is ready to extract into the mpv configuration
