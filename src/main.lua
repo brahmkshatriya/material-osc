@@ -942,6 +942,17 @@ local services = {
   bookmarks = bookmark_service,
   easter_eggs = easter_egg_collection,
   context_actions = context_actions,
+  menu_items = (function()
+    local builder = require("src.services.menu_builder").new({
+      mp = mp, utils = utils, msg = msg,
+      format_key = keybinding_hints_module.label
+    })
+    -- read the menu and announce it to other scripts right away
+    builder:start()
+    return require("src.services.menu_items").new({
+      mp = mp, msg = msg, builder = builder, actions = context_actions
+    })
+  end)(),
   precise_seek = precise.seek,
   sponsorblock = sponsorblock_service,
   toast = toast_service,

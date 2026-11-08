@@ -135,6 +135,22 @@ local function labels_for_key(key)
   return {table.concat(parts, " + ")}
 end
 
+-- the label shown for a key in the context menu, like "Ctrl + S". A capital
+-- letter is a different key than its lowercase one, so it's shown with Shift.
+function keybinding_hints.label(key)
+  key = tostring(key)
+  local modifiers, last = key:match("^(.*%+)(.+)$")
+  if not modifiers then modifiers, last = "", key end
+  if last:match("^%u$") and not modifiers:upper():find("SHIFT", 1, true) then
+    modifiers = modifiers .. "Shift+"
+  end
+  -- "Ctrl++" ends in the plus key itself, and mpv calls the # key SHARP
+  local label = last == "+" and "+" or last == "SHARP" and "#" or
+    labels_for_key(last)[1]
+  if modifiers == "" then return label end
+  return labels_for_key(modifiers)[1] .. " + " .. label
+end
+
 function keybinding_hints.new(args)
   local service = {}
   local cached_bindings, cached_at

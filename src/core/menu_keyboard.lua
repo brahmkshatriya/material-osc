@@ -51,7 +51,8 @@ function menu_keyboard.new(args)
         box.keyboard_up or box.keyboard_down)
       if box and box.enabled ~= false and box.keyboard_enabled ~= false and
         box.keyboard_generation == runtime.input.keyboard_generation and
-        keyboard_interactive and inside(box, state.bounds) and
+        keyboard_interactive and
+        inside(box, state.keyboard_bounds or state.bounds) and
         not is_chrome(name) then
         result[#result + 1] = box
       end
