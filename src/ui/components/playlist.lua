@@ -111,11 +111,11 @@ function playlist.new(services, trailing)
   end
 
   local function FooterButton(name, icon, tooltip, on_click, shortcut,
-      tooltip_allow_when_suppressed, icon_size)
+      tooltip_allow_when_suppressed, icon_size, horizontal_padding)
     local node = ui.IconButton({name = name, icon = icon, tooltip = tooltip,
       on_click = on_click, shortcut = shortcut,
       tooltip_allow_when_suppressed = tooltip_allow_when_suppressed,
-      icon_size = icon_size, horizontal_padding = 6})
+      icon_size = icon_size, horizontal_padding = horizontal_padding or 6})
     return node
   end
 
@@ -419,8 +419,11 @@ function playlist.new(services, trailing)
     }
     node.backdrop = Backdrop()
     node.content = ExpandedContent()
+    -- alone in its circle (prev_next_beside_play), the playlist button is
+    -- square like the play button, so its hover is a circle too
     node.playlist = FooterButton("playlist-button", "playlist_play", "Playlist",
-      function() set_open(not playlist_state.open) end, "open-playlist", true)
+      function() set_open(not playlist_state.open) end, "open-playlist", true,
+      nil, services.config.opts.prev_next_beside_play and 2 or nil)
     node.previous = FooterButton("playlist-previous", "skip_previous", "Previous",
       previous_item, "playlist-prev", true)
     node.next = FooterButton("playlist-next", "skip_next", "Next", next_item,
