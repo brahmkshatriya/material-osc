@@ -139,12 +139,8 @@ function ytdl_service.new(args)
     local request_id = state.request_id
     state.items, state.caption_items, state.selected_id, state.is_live = {}, {}, nil, nil
     state.active, state.source, state.url = true, "youtube", path
-    local command = {"yt-dlp", "--dump-single-json", "--no-playlist", "--no-warnings", path}
-    append_raw_options(command)
-    process:run_async(command, nil, function(success, result)
-        if request_id ~= state.request_id or not success then return end
-        local data = args.utils.parse_json(result.stdout or "")
-        if not data or type(data.formats) ~= "table" then return end
+    local function apply(data)
+        if not data or type(data.formats) ~= "table" then return false end
         state.is_live = data.is_live == true or data.live_status == "is_live"
         local best = {}
         for _, format in ipairs(data.formats) do
@@ -198,7 +194,25 @@ function ytdl_service.new(args)
         table.sort(captions, function(a, b) return a.label < b.label end)
         state.caption_items = captions
         args.render()
-      end)
+        return true
+    end
+
+    -- mpv's ytdl_hook already ran yt-dlp for this URL; reuse its result
+    local hook = mp.get_property_native("user-data/mpv/ytdl/json-subprocess-result")
+    local cached = type(hook) == "table" and hook.status == 0 and
+      args.utils.parse_json(hook.stdout or "")
+    if type(cached) == "table" and
+      (cached.original_url == path or cached.webpage_url == path) and
+      apply(cached) then
+      return
+    end
+
+    local command = {"yt-dlp", "--dump-single-json", "--no-playlist", "--no-warnings", path}
+    append_raw_options(command)
+    process:run_async(command, nil, function(success, result)
+      if request_id ~= state.request_id or not success then return end
+      apply(args.utils.parse_json(result.stdout or ""))
+    end)
   end
 
   return {select_quality = select_quality, restore_subtitles = restore_subtitles,
