@@ -1,5 +1,21 @@
 local snapshot = {}
 
+local channel_names = {[1] = "Mono", [2] = "Stereo", [6] = "5.1", [8] = "7.1"}
+
+-- mpv's layout name when the container states one ("5.1(side)" -> "5.1"),
+-- otherwise the usual layout for the channel count
+function snapshot.channel_label(track)
+  local layout = tostring(track["demux-channels"] or ""):gsub("%(.*%)$", "")
+  if layout:match("^[%w%.]+$") and not layout:match("^unknown") then
+    return (layout:gsub("^%l", string.upper))
+  end
+  local count = tonumber(track["demux-channel-count"]) or 0
+  if count <= 0 then return nil end
+  -- a speaker list without a standard name ("fl-fr-lfe-...") is shown as a count
+  local unnamed = layout ~= "" and not layout:match("^unknown")
+  return (not unnamed and channel_names[count]) or (count .. " ch")
+end
+
 function snapshot.adjust_time(seconds, speed, adjust_with_speed)
   local adjusted = math.max(0, tonumber(seconds) or 0)
   speed = tonumber(speed) or 1
@@ -141,6 +157,8 @@ function snapshot.reader(deps)
             math.floor(bitrate / 1000 + 0.5))
         end
       else
+        local channels = snapshot.channel_label(track)
+        if channels then details[#details + 1] = channels end
         if bitrate and bitrate > 0 then
           details[#details + 1] = string.format("%d Kbps",
             math.floor(bitrate / 1000 + 0.5))
