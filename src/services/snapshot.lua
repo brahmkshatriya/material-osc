@@ -218,7 +218,7 @@ function snapshot.reader(deps)
           end
         end
       end
-      local params = property_native("video-out-params", {}) or {}
+      local params = property_native("video-params", {}) or {}
       local current_height = tonumber(params.h)
       local current_fps = property_number("container-fps") or
         property_number("estimated-vf-fps")
