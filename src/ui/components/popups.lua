@@ -1219,7 +1219,12 @@ end
         elseif item.image then
           open_image_track(item)
           return false
-        elseif item.stream_quality then select_stream_quality(item)
+        elseif item.stream_quality then
+          -- the file reloads: close Settings so its keys (Enter, Space,
+          -- arrows) don't stay captured until the new quality plays
+          set_settings_dialog_open(false)
+          select_stream_quality(item)
+          return false
         else mp.set_property_number("vid", tonumber(item.id)) end
       end
     })

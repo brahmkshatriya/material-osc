@@ -365,6 +365,9 @@ function controller.new(args)
     runtime.pointer.pressed_button = nil
     if pressed then
       self:update_mouse()
+      -- frames drawn while the button is held replace its hitbox and disable
+      -- the old one, so check the current hitbox with the same name
+      pressed = runtime.input.hitboxes[pressed.name] or pressed
       if args.mouse_in(pressed) and pressed.enabled ~= false then
         pressed.on_click()
       end
