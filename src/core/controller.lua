@@ -286,6 +286,19 @@ function controller.new(args)
     end
   end
 
+  -- mpv.net moves the window on a held mouse move outside its guessed OSC
+  -- area, so keep window dragging off while a slider is held
+  local function hold_window_dragging(held)
+    local saved = runtime.pointer.saved_window_dragging
+    if held and saved == nil then
+      runtime.pointer.saved_window_dragging = mp.get_property_bool("window-dragging", true)
+      mp.set_property_bool("window-dragging", false)
+    elseif not held and saved ~= nil then
+      runtime.pointer.saved_window_dragging = nil
+      mp.set_property_bool("window-dragging", saved)
+    end
+  end
+
   function service:on_primary_down()
     runtime.controller.pointer_timed_out = false
     self:update_mouse()
@@ -311,7 +324,10 @@ function controller.new(args)
       end
     end
     if box and box.on_press then
-      if box.on_move or box.on_release then runtime.pointer.active = box end
+      if box.on_move or box.on_release then
+        runtime.pointer.active = box
+        hold_window_dragging(true)
+      end
       box.on_press(box)
     elseif box and box.on_click then
       if box.name == "video-surface" then runtime.pointer.pending_click = box
@@ -361,6 +377,7 @@ function controller.new(args)
       active.on_release(active)
     end
     runtime.pointer.active = nil
+    hold_window_dragging(false)
     local pressed = runtime.pointer.pressed_button
     runtime.pointer.pressed_button = nil
     if pressed then
@@ -397,6 +414,7 @@ function controller.new(args)
       end
       runtime.pointer.precise_scrub = nil
       runtime.pointer.active = nil
+      hold_window_dragging(false)
       runtime.pointer.pending_click = nil
       runtime.pointer.pressed_button = nil
       runtime.pointer.window_dragging = nil
