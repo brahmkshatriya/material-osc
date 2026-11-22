@@ -247,7 +247,7 @@ function mpv_runtime.new(args)
       {"window-maximized", "bool"}, {"ontop", "bool"}, {"seeking", "bool"},
       {"paused-for-cache", "bool"}, {"cache-buffering-state", "number"},
       {"vid", "number"},
-      {"video-out-params", "native"}, {"demuxer-via-network", "bool"},
+      {"video-params", "native"}, {"demuxer-via-network", "bool"},
       {"playlist", "native"}, {"playlist-pos", "number"},
       {"input-bindings", "native"},
       {"loop-playlist", "string"}, {"loop-file", "string"},
