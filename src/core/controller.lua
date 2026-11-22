@@ -335,6 +335,13 @@ function controller.new(args)
         runtime.pointer.click_timer:kill(); runtime.pointer.click_timer = nil
       end
       box.on_double(box)
+    elseif box and not runtime.pointer.pressed_button and
+      not runtime.pointer.active then
+      -- mpv.net sends a quick second click only as a double-click, without
+      -- its press and release, so treat it as a click
+      self:on_primary_down()
+      self:on_primary_up()
+      return
     end
     self:sync_visibility_with_pointer()
   end
