@@ -392,6 +392,8 @@ local function create_app(services)
       if self.empty_visible then ui.draw_node(self.empty_state, ass, root) end
       return
     end
+    -- before the controls, so ones drawn over a zone (the volume popup) get the click
+    self.edge_seek:register(root)
     if opts.show_mini_seekbar then
       local duration = state.snapshot.duration or 0
       local opacity = 1 - ui.clamp(state.controller.opacity.value, 0, 1)
