@@ -31,8 +31,11 @@ function edge_seek.new(services)
         render()
       end)
     end
+    -- keep the zone's slot so controls registered after it stay on top
+    if not state.input.hitboxes[name] then
+      state.input.order[#state.input.order + 1] = name
+    end
     state.input.hitboxes[name] = bounds
-    state.input.order[#state.input.order + 1] = name
   end
 
   local function draw_side(ass, root, side, direction)
@@ -69,7 +72,7 @@ function edge_seek.new(services)
       "#FFFFFF", alpha, ui.default_text_font, nil, nil, true)
   end
 
-  function service:draw(ass, root)
+  function service:register(root)
     local zone_w = root.w * zone_fraction
     local zone_h = state.controller.bounds and
       math.max(0, state.controller.bounds.y1 - root.y) or root.h
@@ -85,6 +88,9 @@ function edge_seek.new(services)
     state.edge_seek.left.bounds, state.edge_seek.right.bounds = left, right
     register_hitbox("left", left, -step)
     register_hitbox("right", right, step)
+  end
+
+  function service:draw(ass, root)
     if modal_open() then return end
     draw_side(ass, root, "left", -1)
     draw_side(ass, root, "right", 1)
