@@ -18,6 +18,8 @@ function subtitle_position.new(args)
     initialized = false,
     enabled = args.enabled ~= false
   }
+  -- sub-pos from mpv's config, before anything moves it
+  service.configured = service.baseline
 
   local function set_number(value)
     value = math.floor(value * 100 + 0.5) / 100
@@ -46,6 +48,12 @@ function subtitle_position.new(args)
     end
   end
   mp.observe_property(property, "native", observe_position)
+
+  -- the user's chosen position; the lift above the OSC is applied on top
+  function service:set_baseline(value)
+    self.baseline = value
+    set_number(value)
+  end
 
   function service:set_enabled(enabled)
     enabled = enabled ~= false
