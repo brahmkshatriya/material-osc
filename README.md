@@ -79,6 +79,7 @@ aspect ratio, and disables automatic window resizing between files; see
 | `adjust_time_with_speed` | `yes` | `yes`, `no` | Adjusts elapsed, remaining, and total displayed time for the current playback speed. |
 | `adjust_subtitle_position` | `yes` | `yes`, `no` | Moves bottom-aligned subtitles above the OSC while it is visible. Set to `no` to preserve mpv's configured `sub-pos`. |
 | `max_volume_percentage` | `150` | Percentage; minimum `100` | Sets mpv's upper volume limit and the OSC volume range. Left at its default, material-osc preserves mpv's configured `volume-max` instead; set this explicitly to override it. |
+| `guessit` | `yes` | `yes`, `no` | Cleans up local filenames into titles with Python's `guessit` when it is installed. See [Optional media-title parsing](#optional-media-title-parsing). |
 
 </details>
 
@@ -249,7 +250,9 @@ If the Python [`guessit`](https://github.com/guessit-io/guessit) package is
 installed, material-osc automatically uses it to clean local movie and episode
 filenames. When `guessit` is unavailable, mpv's normal media title is used with
 no additional setup or error message. Explicit `force-media-title` values are
-always preserved.
+always preserved. The lookup runs in the background, so files start playing
+right away and the cleaned title appears a moment later. Set `guessit=no` to
+skip it entirely.
 
 ## Building
 
