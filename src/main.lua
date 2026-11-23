@@ -479,7 +479,16 @@ local function create_app(services)
       end
       return
     end
-    if state.snapshot.buffering then services.loading.draw(ass) end
+    -- show the loading indicator only once buffering lasts a second, so
+    -- quick seeks don't flash it
+    if state.snapshot.buffering then
+      state.loading.buffering_since = state.loading.buffering_since or mp.get_time()
+      if mp.get_time() - state.loading.buffering_since >= 1 then
+        services.loading.draw(ass)
+      end
+    else
+      state.loading.buffering_since = nil
+    end
     services.playback_indicator:draw(ass, root)
     self.edge_seek:draw(ass, root)
     ui.draw_node(self.media_information_close, ass, root)
