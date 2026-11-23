@@ -92,6 +92,10 @@ function subtitle_position.new(args)
       mp.get_property("sub-align-y", "bottom") == "bottom" then
       local adjusted = math.max(
         0, 100 - occupied_pixels * 100 / viewport_height)
+      -- below mpv's bottom (sub-pos > 100), rise only as far as the OSC shows
+      local shown = controller_height > 0 and
+        math.min(1, occupied_pixels / controller_height) or 0
+      adjusted = adjusted + math.max(0, self.baseline - 100) * (1 - shown)
       if self.baseline >= adjusted then value = adjusted end
     end
     set_number(value)
