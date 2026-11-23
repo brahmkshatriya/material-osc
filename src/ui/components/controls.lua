@@ -1093,6 +1093,10 @@ function controls.new(services)
           set_pip_enabled(false)
         elseif node.fullscreen then
           mp.set_property_bool("fullscreen", false)
+        elseif node.borderless and not node.maximized then
+          -- a maximized borderless window covers the whole screen like
+          -- fullscreen, so f and the fullscreen button seemed to do nothing
+          mp.set_property_bool("fullscreen", true)
         else
           mp.commandv("cycle", "window-maximized")
         end
@@ -1136,11 +1140,14 @@ function controls.new(services)
 
     function node:update(snapshot)
       self.fullscreen = snapshot.fullscreen
+      self.maximized = snapshot.window_maximized
+      self.borderless = not snapshot.window_border
       local restored = snapshot.fullscreen or snapshot.window_maximized
       self.maximize:update({
         icon = restored and "filter_none" or "crop_square",
         tooltip = snapshot.fullscreen and "Exit Fullscreen" or
-          (snapshot.window_maximized and "Restore" or "Maximize")
+          (snapshot.window_maximized and "Restore" or
+            (self.borderless and "Fullscreen" or "Maximize"))
       })
     end
 
