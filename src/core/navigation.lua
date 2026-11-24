@@ -90,6 +90,9 @@ function navigation.new(args)
       active_id = runtime.snapshot.secondary_subtitle_id
     elseif page == "auto_captions" then
       items = runtime.ytdl.caption_items
+    elseif page == "audio_devices" then
+      items = runtime.snapshot.audio_device_items
+      active_id = runtime.snapshot.audio_device
     end
     self:scroll_to_active(state, items, active_id)
     self:render()

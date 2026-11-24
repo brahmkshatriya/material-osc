@@ -261,7 +261,9 @@ function mpv_runtime.new(args)
       {"glsl-shaders", "native"},
       {"sub-delay", "number"}, {"sub-font-size", "number"},
       {"sub-outline-size", "number"}, {"sub-color", "string"},
-      {"sub-font", "string"}, {"volume-max", "number"}
+      {"sub-font", "string"}, {"volume-max", "number"},
+      {"audio-delay", "number"}, {"audio-device", "string"},
+      {"audio-device-list", "native"}
     }) do
       local name = property[1]
       mp.observe_property(name, property[2], function(_, value)
