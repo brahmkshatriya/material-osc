@@ -1087,6 +1087,14 @@ local temporary_speed = temporary_speed_module.new({
 })
 services.temporary_speed = temporary_speed
 services.subtitle_position = subtitle_position
+-- subtitle style at start (from mpv.conf, else mpv's defaults), for reset
+services.subtitle_defaults = {
+  delay = mp.get_property_number("sub-delay", 0),
+  font_size = mp.get_property_number("sub-font-size", 38),
+  border = mp.get_property_number("sub-outline-size", 1.65),
+  color = mp.get_property("sub-color", "#FFFFFFFF"),
+  font = mp.get_property("sub-font", "sans-serif")
+}
 local app = create_app(services)
 
 local snapshot_reader = snapshot_module.cached_reader({

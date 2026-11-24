@@ -704,11 +704,12 @@ end
       })
     }
     local function reset_subtitle_style()
-      mp.set_property_number("sub-delay", 0)
-      mp.set_property_number("sub-font-size", 38)
-      mp.set_property_number("sub-outline-size", 1.65)
-      mp.set_property("sub-color", "#FFFFFFFF")
-      mp.set_property("sub-font", "sans-serif")
+      local defaults = services.subtitle_defaults
+      mp.set_property_number("sub-delay", defaults.delay)
+      mp.set_property_number("sub-font-size", defaults.font_size)
+      mp.set_property_number("sub-outline-size", defaults.border)
+      mp.set_property("sub-color", defaults.color)
+      mp.set_property("sub-font", defaults.font)
       services.subtitle_position:set_baseline(services.subtitle_position.configured)
       render()
     end
