@@ -47,6 +47,8 @@ local definitions = {
   {name = "show_empty_screen", default = true, group = "appearance"},
   {name = "screenshot_button", default = true, group = "appearance"},
   {name = "pip_button", default = true, group = "appearance"},
+  {name = "volume_slider", default = "vertical", group = "appearance",
+    normalize = enum("vertical", {"vertical", "horizontal"})},
   {name = "ontop_button", default = false, group = "appearance"},
   {name = "info_button", default = false, group = "appearance"},
   {name = "prev_next_beside_play", default = false, group = "appearance"},

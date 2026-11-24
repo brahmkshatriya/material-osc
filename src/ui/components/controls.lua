@@ -98,20 +98,27 @@ function controls.new(services)
     return true
   end
 
+  local function horizontal_volume()
+    return config.opts.volume_slider == "horizontal"
+  end
+
   local function VolumeSlider()
     local node = {
       volume = 0,
       max_volume_percentage = max_volume_percentage,
       progress = 0,
-      track_y1 = 0,
-      track_y2 = 0,
+      -- the track runs from 0 (start) to max volume (finish): bottom to top,
+      -- or left to right when horizontal
+      track_start = 0,
+      track_finish = 0,
       modifier = Modifier():fillMaxWidth():fillMaxHeight()
     }
 
     local function set_from_mouse()
-      local track_length = node.track_y2 - node.track_y1
-      if track_length <= 0 then return end
-      local value = clamp((node.track_y2 - pointer.y) / track_length, 0, 1)
+      local track_length = node.track_finish - node.track_start
+      if track_length == 0 then return end
+      local position = node.horizontal and pointer.x or pointer.y
+      local value = clamp((position - node.track_start) / track_length, 0, 1)
       mp.set_property_number("volume", value * node.max_volume_percentage)
     end
 
@@ -149,47 +156,57 @@ function controls.new(services)
     end
 
     function node:draw(ass, bounds)
-      local track_x = bounds.x + bounds.w / 2
-      self.track_y1 = bounds.y + dp(18)
-      self.track_y2 = bounds.y2 - dp(10)
-      local track_length = self.track_y2 - self.track_y1
-      if track_length <= dp(2) then return end
+      local horizontal = horizontal_volume()
+      self.horizontal = horizontal
+      local center
+      if horizontal then
+        center = bounds.y + bounds.h / 2
+        self.track_start, self.track_finish = bounds.x + dp(10), bounds.x2 - dp(18)
+      else
+        center = bounds.x + bounds.w / 2
+        self.track_start, self.track_finish = bounds.y2 - dp(10), bounds.y + dp(18)
+      end
+      local track_length = self.track_finish - self.track_start
+      if math.abs(track_length) <= dp(2) then return end
+      local direction = track_length > 0 and 1 or -1
+
+      -- a bar between two track points, a nearer the finish than b; skipped
+      -- when they cross (e.g. the handle sits at the end of the track)
+      local function bar(a, b, thickness, color, alpha)
+        if (a - b) * direction <= 0 then return end
+        local low, high = math.min(a, b), math.max(a, b)
+        if horizontal then
+          draw_rect(ass, low, center - thickness / 2, high, center + thickness / 2,
+            color, alpha)
+        else
+          draw_rect(ass, center - thickness / 2, low, center + thickness / 2, high,
+            color, alpha)
+        end
+      end
 
       local fade_progress = smooth_step(clamp(self.progress, 0, 1))
       local inactive_alpha = ass_alpha_for_opacity(fade_progress * 0.4)
       local active_alpha = ass_alpha_for_opacity(fade_progress)
       local track_w = dp(4)
-      local handle_y = self.track_y2 -
+      local handle = self.track_start +
         track_length * self.volume / self.max_volume_percentage
-      local normal_limit_y = self.track_y2 -
+      local normal_limit = self.track_start +
         track_length * 100 / self.max_volume_percentage
       local boosted = self.volume > 100
       local active_color = boosted and "#FF9800" or "#FFFFFF"
       local handle_w = dp(24)
       local handle_h = volume_state.dragging and dp(2) or dp(4)
-      local handle_gap = dp(4)
-      local active_start_y = handle_y + handle_h / 2 + handle_gap
+      local handle_gap = (handle_h / 2 + dp(4)) * direction
 
-      draw_rect(ass, track_x - track_w / 2, self.track_y1,
-            track_x + track_w / 2, handle_y - handle_h / 2 - handle_gap,
-            "#FFFFFF", inactive_alpha)
-
+      bar(self.track_finish, handle + handle_gap, track_w, "#FFFFFF", inactive_alpha)
       if boosted then
-        draw_rect(ass, track_x - track_w / 2, active_start_y,
-              track_x + track_w / 2, normal_limit_y,
-              "#FF9800", active_alpha)
-        draw_rect(ass, track_x - track_w / 2, normal_limit_y,
-              track_x + track_w / 2, self.track_y2,
-              "#FFFFFF", active_alpha)
+        bar(handle - handle_gap, normal_limit, track_w, "#FF9800", active_alpha)
+        bar(normal_limit, self.track_start, track_w, "#FFFFFF", active_alpha)
       else
-        draw_rect(ass, track_x - track_w / 2, active_start_y,
-              track_x + track_w / 2, self.track_y2,
-              "#FFFFFF", active_alpha)
+        bar(handle - handle_gap, self.track_start, track_w, "#FFFFFF", active_alpha)
       end
-
-      draw_box(ass, track_x - handle_w / 2, handle_y - handle_h / 2,
-           track_x + handle_w / 2, handle_y + handle_h / 2,
-           handle_h / 2, active_color, active_alpha)
+      bar(handle + handle_h / 2 * direction, handle - handle_h / 2 * direction,
+        handle_w, active_color, active_alpha)
     end
 
     return node
@@ -243,10 +260,19 @@ function controls.new(services)
       self.slider:update(snapshot, volume_state.animation.value)
     end
 
-    function node:measure(parent) return self.button:measure(parent) end
+    -- a horizontal slider makes room in the row as it opens, so the time
+    -- display slides along with its edge
+    function node:measure(parent)
+      local size = self.button:measure(parent)
+      self.button_w = size.w
+      local room = horizontal_volume() and
+        dp(138) * clamp(volume_state.animation.value, 0, 1.08) or 0
+      return {w = size.w + room, h = size.h}
+    end
 
     function node:draw(ass, bounds)
       self.bounds = bounds
+      bounds = Rect({x = bounds.x, y = bounds.y, w = self.button_w or bounds.w, h = bounds.h})
       volume_state.button_bounds = bounds
       if is_render_pass("base") then
         draw_node(self.button, ass, bounds)
@@ -257,38 +283,49 @@ function controls.new(services)
         return
       end
       if not is_render_pass("dynamic") then return end
-      local popup_w = dp(42)
-      local expanded_h = dp(142) + bounds.h + dp(4)
-      local popup_x1 = bounds.x + bounds.w / 2 - popup_w / 2
-      local popup_y2 = bounds.y2 + dp(4)
-      local collapsed_y1 = bounds.y - dp(4)
-      local expanded_y1 = popup_y2 - expanded_h
       local visual_progress = clamp(volume_state.animation.value, 0, 1.08)
-      local popup = Rect({
-        x = popup_x1,
-        y = lerp(collapsed_y1, expanded_y1, visual_progress),
-        w = popup_w,
-        h = popup_y2 - lerp(collapsed_y1, expanded_y1, visual_progress)
-      })
+      local popup, slider_bounds, guard_bounds
+      if horizontal_volume() then
+        -- grows to the right of the button
+        local popup_h = dp(42)
+        local popup_x1 = bounds.x - dp(4)
+        local popup_x2 = lerp(bounds.x2 + dp(4), bounds.x2 + dp(142), visual_progress)
+        popup = Rect({x = popup_x1, y = bounds.y + bounds.h / 2 - popup_h / 2,
+          w = popup_x2 - popup_x1, h = popup_h})
+        slider_bounds = Rect({x = bounds.x2, y = popup.y,
+          w = math.max(0, popup.x2 - bounds.x2), h = popup.h})
+        guard_bounds = Rect({x = popup.x, y = popup.y,
+          w = math.max(0, bounds.x - popup.x), h = popup.h})
+      else
+        local popup_w = dp(42)
+        local expanded_h = dp(142) + bounds.h + dp(4)
+        local popup_x1 = bounds.x + bounds.w / 2 - popup_w / 2
+        local popup_y2 = bounds.y2 + dp(4)
+        local collapsed_y1 = bounds.y - dp(4)
+        local expanded_y1 = popup_y2 - expanded_h
+        popup = Rect({
+          x = popup_x1,
+          y = lerp(collapsed_y1, expanded_y1, visual_progress),
+          w = popup_w,
+          h = popup_y2 - lerp(collapsed_y1, expanded_y1, visual_progress)
+        })
+        slider_bounds = Rect({x = popup.x, y = popup.y, w = popup.w,
+          h = math.max(0, bounds.y - popup.y)})
+        guard_bounds = Rect({x = popup.x, y = bounds.y2, w = popup.w,
+          h = math.max(0, popup.y2 - bounds.y2)})
+      end
       volume_state.popup_bounds = popup
       self.guard.modifier.pointer_enabled = visual_progress > 0.2
 
       local popup_alpha = mouse_in(popup) and "00" or "58"
       draw_box(ass, popup.x1, popup.y1, popup.x2, popup.y2,
-           popup.w / 2, "#050708", popup_alpha)
+           math.min(popup.w, popup.h) / 2, "#050708", popup_alpha)
 
-      local slider_bounds = Rect({
-        x = popup.x,
-        y = popup.y,
-        w = popup.w,
-        h = math.max(0, bounds.y - popup.y)
-      })
-      if slider_bounds.h > 0 then draw_node(self.slider, ass, slider_bounds) end
-      local guard_height = math.max(0, popup.y2 - bounds.y2)
-      if guard_height > 0 then
-        draw_node(self.guard, ass, Rect({
-          x = popup.x, y = bounds.y2, w = popup.w, h = guard_height
-        }))
+      if slider_bounds.w > 0 and slider_bounds.h > 0 then
+        draw_node(self.slider, ass, slider_bounds)
+      end
+      if guard_bounds.w > 0 and guard_bounds.h > 0 then
+        draw_node(self.guard, ass, guard_bounds)
       end
       draw_node(self.button, ass, bounds)
     end
