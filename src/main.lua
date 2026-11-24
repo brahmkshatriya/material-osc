@@ -120,7 +120,8 @@ local persistence = persistence_module.new({filesystem = filesystem, utils = uti
 local timers = timers_module.new({mp = mp})
 local media_title = media_title_module.new({
   mp = mp, process = process, utils = utils,
-  runtime = platform_runtime, msg = msg
+  runtime = platform_runtime, msg = msg,
+  enabled = function() return opts.guessit end
 })
 media_title:register()
 

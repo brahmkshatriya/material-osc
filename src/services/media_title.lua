@@ -85,44 +85,56 @@ function media_title.new(args)
   local unavailable = false
   local service = {}
 
-  local function parse(candidate, filename)
+  local function parse(candidate, filename, callback)
     local command = copy(candidate)
     command[#command + 1] = "-c"
     command[#command + 1] = PYTHON_SCRIPT
     command[#command + 1] = filename
-    local ok, result = process:run(command, {capture_size = 1024 * 1024})
-    if not ok then return nil end
-    local parsed = utils.parse_json(result.stdout or "")
-    return type(parsed) == "table" and parsed or nil
+    process:run_async(command, {capture_size = 1024 * 1024}, function(ok, result)
+      local parsed = ok and utils.parse_json(result.stdout or "") or nil
+      callback(type(parsed) == "table" and parsed or nil)
+    end)
   end
 
-  local function guess(filename)
-    if unavailable then return nil end
-    if python_command then return parse(python_command, filename) end
-    for _, candidate in ipairs(candidates) do
-      local parsed = parse(candidate, filename)
-      if parsed then
-        python_command = candidate
-        return parsed
+  local function guess(filename, callback)
+    if unavailable then return callback(nil) end
+    if python_command then return parse(python_command, filename, callback) end
+    local index = 0
+    local function try_next()
+      index = index + 1
+      local candidate = candidates[index]
+      if not candidate then
+        unavailable = true
+        if args.msg then
+          args.msg.verbose("guessit is unavailable; using mpv media titles")
+        end
+        return callback(nil)
       end
+      parse(candidate, filename, function(parsed)
+        if not parsed then return try_next() end
+        python_command = candidate
+        callback(parsed)
+      end)
     end
-    unavailable = true
-    if args.msg then
-      args.msg.verbose("guessit is unavailable; using mpv media titles")
-    end
-    return nil
+    try_next()
   end
 
   function service:load()
+    if args.enabled and not args.enabled() then return end
     local path = mp.get_property("path", "") or ""
     if not is_local(path) then return end
     local forced = mp.get_property("force-media-title", "") or ""
     if forced:match("%S") then return end
     local filename = mp.get_property("filename", "") or ""
     if filename == "" then filename = path:match("([^/\\]+)$") or path end
-    local title = media_title.format(guess(filename))
-    if not title then return end
-    mp.set_property("file-local-options/force-media-title", title)
+    -- look the title up in the background so the file isn't held back
+    guess(filename, function(guessed)
+      local title = media_title.format(guessed)
+      if not title or mp.get_property("path", "") ~= path then return end
+      -- something else forced a title while the lookup ran
+      if (mp.get_property("force-media-title", "") or ""):match("%S") then return end
+      mp.set_property("file-local-options/force-media-title", title)
+    end)
   end
 
   function service:register()

@@ -86,6 +86,7 @@ local definitions = {
   {name = "adjust_subtitle_position", default = true, group = "behavior"},
   {name = "max_volume_percentage", default = 150, group = "behavior",
     normalize = number({default = 150, min = 100})},
+  {name = "guessit", default = true, group = "behavior"},
   {name = "skip_intro_outro_chapters", default = "ask", group = "behavior",
     normalize = enum("ask", {"yes", "no", "ask"})},
   {name = "skip_intro_detection_texts",
