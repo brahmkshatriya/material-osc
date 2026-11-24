@@ -1077,6 +1077,7 @@ local temporary_speed = temporary_speed_module.new({
   end
 })
 services.temporary_speed = temporary_speed
+services.subtitle_position = subtitle_position
 local app = create_app(services)
 
 local snapshot_reader = snapshot_module.cached_reader({
@@ -1268,7 +1269,9 @@ local renderer = frame_runtime.renderer.new({
       runtime.controller.opacity.target,
       runtime.viewport.h,
       mp.get_time(),
-      opts.adjust_subtitle_position)
+      -- while adjusting the height, show subtitles where they really are
+      opts.adjust_subtitle_position and not (runtime.settings.open and
+        runtime.settings.page == "subtitle_style"))
   end,
   on_frame = performance and function(mode)
     if mode == "full" then

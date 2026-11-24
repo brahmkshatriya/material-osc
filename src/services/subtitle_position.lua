@@ -18,6 +18,8 @@ function subtitle_position.new(args)
     initialized = false,
     enabled = args.enabled ~= false
   }
+  -- sub-pos from mpv's config, before anything moves it
+  service.configured = service.baseline
 
   local function set_number(value)
     value = math.floor(value * 100 + 0.5) / 100
@@ -46,6 +48,12 @@ function subtitle_position.new(args)
     end
   end
   mp.observe_property(property, "native", observe_position)
+
+  -- the user's chosen position; the lift above the OSC is applied on top
+  function service:set_baseline(value)
+    self.baseline = value
+    set_number(value)
+  end
 
   function service:set_enabled(enabled)
     enabled = enabled ~= false
@@ -84,6 +92,10 @@ function subtitle_position.new(args)
       mp.get_property("sub-align-y", "bottom") == "bottom" then
       local adjusted = math.max(
         0, 100 - occupied_pixels * 100 / viewport_height)
+      -- below mpv's bottom (sub-pos > 100), rise only as far as the OSC shows
+      local shown = controller_height > 0 and
+        math.min(1, occupied_pixels / controller_height) or 0
+      adjusted = adjusted + math.max(0, self.baseline - 100) * (1 - shown)
       if self.baseline >= adjusted then value = adjusted end
     end
     set_number(value)
