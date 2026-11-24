@@ -29,7 +29,7 @@ material-osc can be customized with a `material-osc.conf` file in mpv's
 | `vidscale` | `no` | `no`, `shrink`, `yes` | Scales the interface with the window height. `shrink` scales it down in windows shorter than `vidscale_reference`, `yes` also scales it up, and `no` keeps a fixed size. |
 | `vidscale_reference` | `720` | Pixels, `100` or more | Window height at which the interface is shown at its normal size. |
 | `vidscale_min` | `0.35` | `0.1`–`1` | Smallest scale factor `vidscale` can reach. |
-| `accent_color` | `"#00bbff"` | Quoted six-digit RGB color | Sets the seekbar, selections, toggles, and other highlighted elements. |
+| `accent_color` | `"#00bbff"` | Quoted six-digit RGB color, or `system` | Sets the seekbar, selections, toggles, and other highlighted elements. `system` follows the Windows accent color, read when mpv starts; elsewhere it uses the default. |
 | `context_menu` | `yes` | `yes`, `no` | Enables the material-osc context menu. When disabled, right-click and menu-key bindings remain available to mpv and other scripts. |
 | `tooltip` | `yes` | `yes`, `no` | Enables tooltips for controls. |
 | `show_mini_seekbar` | `no` | `yes`, `no` | Keeps a 1dp playback-progress line at the bottom while the main controls are hidden. |

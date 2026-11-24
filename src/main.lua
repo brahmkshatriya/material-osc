@@ -14,7 +14,34 @@ local opts = config_schema.defaults()
 local option_defaults = config_schema.defaults()
 local options_update_handler
 local config_watcher
-local function normalize_option_values(values) return config_schema.normalize(values) end
+local normalize_option_values
+do -- a block keeps these out of main.lua's 200-local limit
+  -- accent_color=system follows the Windows accent color, read once per start
+  local system_accent
+  local function windows_accent()
+    if system_accent then return system_accent end
+    system_accent = option_defaults.accent_color
+    if package.config:sub(1, 1) ~= "\\" then return system_accent end
+    local result = mp.command_native({name = "subprocess", playback_only = false,
+      capture_stdout = true, args = {"reg", "query",
+        "HKCU\\Software\\Microsoft\\Windows\\DWM", "/v", "AccentColor"}})
+    local abgr = result and result.status == 0 and
+      (result.stdout or ""):match("AccentColor%s+REG_DWORD%s+0x(%x+)")
+    if abgr then
+      abgr = string.format("%08x", tonumber(abgr, 16))
+      system_accent = "#" .. abgr:sub(7, 8) .. abgr:sub(5, 6) .. abgr:sub(3, 4)
+      msg.verbose("accent_color follows the Windows accent: " .. system_accent)
+    end
+    return system_accent
+  end
+  normalize_option_values = function(values)
+    config_schema.normalize(values)
+    if tostring(values.accent_color):lower() == "system" then
+      values.accent_color = windows_accent()
+    end
+    return values
+  end
+end
 options.read_options(opts, "material-osc", function(changed)
   normalize_option_values(opts)
   if config_watcher then config_watcher:preserve(changed) end
