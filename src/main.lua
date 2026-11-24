@@ -1093,7 +1093,8 @@ services.subtitle_defaults = {
   font_size = mp.get_property_number("sub-font-size", 38),
   border = mp.get_property_number("sub-outline-size", 1.65),
   color = mp.get_property("sub-color", "#FFFFFFFF"),
-  font = mp.get_property("sub-font", "sans-serif")
+  font = mp.get_property("sub-font", "sans-serif"),
+  secondary_position = mp.get_property_number("secondary-sub-pos", 0)
 }
 local app = create_app(services)
 
