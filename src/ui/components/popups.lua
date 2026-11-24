@@ -1179,7 +1179,7 @@ end
       self.rotation_row:update(common)
       common.label, common.value = "Shaders", tostring(self.shader_count)
       self.shaders_row:update(common)
-      common.label, common.value = "HDR to SDR", self.hdr or ""
+      common.label, common.value = "HDR tone mapping", self.hdr or ""
       self.hdr_row:update(common)
     end
     function node:measure(parent)
@@ -1195,7 +1195,7 @@ end
         {self.contrast_row, 44}, {self.saturation_row, 44},
         {self.rotation_row, 44}, {self.shaders_row, 44}
       }
-      -- only HDR video is converted, so the row is hidden for SDR
+      -- tone mapping only applies to HDR video, so the row is hidden for SDR
       if self.hdr then rows[#rows + 1] = {self.hdr_row, 44} end
       local y = bounds.y + dp(60)
       for _, entry in ipairs(rows) do
@@ -1207,9 +1207,9 @@ end
     return node
   end
 
-  -- HDR to SDR conversion: each row steps through the choices mpv offers,
-  -- leaving out the ones mpv's manual marks as --vo=gpu-next only when the
-  -- older vo=gpu renders
+  -- HDR tone mapping (to SDR, or to an HDR screen's limits): each row steps
+  -- through the choices mpv offers, leaving out the ones mpv's manual marks
+  -- as --vo=gpu-next only when the older vo=gpu renders
   local hdr_options = {
     {name = "tone-mapping", label = "Tone mapping",
       gpu_next_only = {spline = true, ["bt.2446a"] = true, ["st2094-40"] = true}},
@@ -1257,7 +1257,7 @@ end
       mp.set_property(name, cycle_option(choices, current, direction,
         function(v) return v end))
     end
-    node.header = ChapterHeader(on_back, "HDR to SDR", "arrow_back", {
+    node.header = ChapterHeader(on_back, "HDR tone mapping", "arrow_back", {
       name = "video-hdr-reset", icon = "restart_alt",
       tooltip = "Reset HDR Settings",
       on_click = function()
