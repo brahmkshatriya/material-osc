@@ -1,6 +1,8 @@
 local snapshot = {}
 
 local channel_names = {[1] = "Mono", [2] = "Stereo", [6] = "5.1", [8] = "7.1"}
+-- transfer curves of HDR video, from video-params/gamma
+local hdr_transfer = {pq = true, hlg = true}
 
 -- mpv's layout name when the container states one ("5.1(side)" -> "5.1"),
 -- otherwise the usual layout for the channel count
@@ -300,6 +302,12 @@ function snapshot.reader(deps)
       video_saturation = property_number("saturation", 0) or 0,
       video_rotation = property_number("video-rotate", 0) or 0,
       shader_items = shader_items,
+      video_is_hdr = hdr_transfer[(property_native("video-params", {}) or {}).gamma] == true,
+      video_hdr_values = {
+        ["tone-mapping"] = property("tone-mapping", "auto"),
+        ["gamut-mapping-mode"] = property("gamut-mapping-mode", "auto"),
+        ["hdr-compute-peak"] = property("hdr-compute-peak", "auto")
+      },
       max_volume_percentage = math.max(100,
         property_number("volume-max", max_volume_percentage) or
           max_volume_percentage),

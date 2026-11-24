@@ -1092,9 +1092,9 @@ end
 
   local function VideoSettingsPopup(on_back)
     local node = {
-      width = dp(380), height = dp(332), interactive = false,
+      width = dp(380), height = dp(376), interactive = false,
       panel_alpha = "00", text_alpha = "00", secondary_alpha = "00",
-      hover_alpha = "00", crop = "", gamma = 0, brightness = 0,
+      hover_alpha = "00", crop = "", gamma = 0, brightness = 0, hdr = false,
       contrast = 0, saturation = 0, rotation = 0, shader_count = 0,
       keepaspect = true, panscan = 0,
       modifier = Modifier():clickable({
@@ -1157,6 +1157,8 @@ end
       end)
     node.shaders_row = SettingsActionRow("video-settings-shaders", "texture",
       function() set_settings_page("video_shaders") end)
+    node.hdr_row = SettingsActionRow("video-settings-hdr", "hdr_on",
+      function() set_settings_page("video_hdr") end)
     function node:update(props)
       update_fields(self, props)
       self.modifier.fixed_width, self.modifier.fixed_height = self.width, self.height
@@ -1177,6 +1179,8 @@ end
       self.rotation_row:update(common)
       common.label, common.value = "Shaders", tostring(self.shader_count)
       self.shaders_row:update(common)
+      common.label, common.value = "HDR to SDR", self.hdr or ""
+      self.hdr_row:update(common)
     end
     function node:measure(parent)
       return apply_modifier_size(self.modifier, {w = self.width, h = self.height}, parent)
@@ -1191,11 +1195,106 @@ end
         {self.contrast_row, 44}, {self.saturation_row, 44},
         {self.rotation_row, 44}, {self.shaders_row, 44}
       }
+      -- only HDR video is converted, so the row is hidden for SDR
+      if self.hdr then rows[#rows + 1] = {self.hdr_row, 44} end
       local y = bounds.y + dp(60)
       for _, entry in ipairs(rows) do
         draw_node(entry[1], ass, Rect({x = bounds.x + dp(8), y = y,
           w = bounds.w - dp(16), h = dp(entry[2])}))
         y = y + dp(entry[2])
+      end
+    end
+    return node
+  end
+
+  -- HDR to SDR conversion: each row steps through the choices mpv offers,
+  -- leaving out the ones mpv's manual marks as --vo=gpu-next only when the
+  -- older vo=gpu renders
+  local hdr_options = {
+    {name = "tone-mapping", label = "Tone mapping",
+      gpu_next_only = {spline = true, ["bt.2446a"] = true, ["st2094-40"] = true}},
+    {name = "gamut-mapping-mode", label = "Gamut mapping",
+      gpu_next_only = {perceptual = true, relative = true, saturation = true,
+        absolute = true, darken = true, linear = true}},
+    {name = "hdr-compute-peak", label = "Peak detection", gpu_next_only = {}}
+  }
+
+  local function hdr_choice_label(value)
+    value = tostring(value or "")
+    if value == "yes" then return "On" elseif value == "no" then return "Off" end
+    if value:match("^bt%.") or value:match("^st%d") then
+      return (value:gsub("^%a+", string.upper))
+    end
+    return value:sub(1, 1):upper() .. value:sub(2)
+  end
+
+  local function HdrSettingsPopup(on_back)
+    local node = {
+      width = dp(380), height = dp(200), interactive = false,
+      panel_alpha = "00", text_alpha = "00", secondary_alpha = "00",
+      hover_alpha = "00", values = {}, rows = {},
+      modifier = Modifier():clickable({
+        name = "video-hdr-panel", enabled = false, on_click = function() end
+      })
+    }
+    -- values from before the first change made here (mpv.conf or a profile);
+    -- Reset puts them back
+    local originals = {}
+    local function step(option, direction)
+      local name = option.name
+      local choices = mp.get_property_native("option-info/" .. name .. "/choices")
+      if type(choices) ~= "table" then return end
+      if mp.get_property("current-vo") ~= "gpu-next" then
+        local supported = {}
+        for _, choice in ipairs(choices) do
+          if not option.gpu_next_only[choice] then supported[#supported + 1] = choice end
+        end
+        choices = supported
+      end
+      if #choices == 0 then return end
+      local current = mp.get_property(name)
+      if originals[name] == nil then originals[name] = current end
+      mp.set_property(name, cycle_option(choices, current, direction,
+        function(v) return v end))
+    end
+    node.header = ChapterHeader(on_back, "HDR to SDR", "arrow_back", {
+      name = "video-hdr-reset", icon = "restart_alt",
+      tooltip = "Reset HDR Settings",
+      on_click = function()
+        for name, value in pairs(originals) do mp.set_property(name, value) end
+        originals = {}
+      end
+    })
+    for index, option in ipairs(hdr_options) do
+      node.rows[index] = SubtitleAdjustRow("video-hdr-" .. option.name, option.label,
+        function() step(option, -1) end, function() step(option, 1) end)
+    end
+    function node:update(props)
+      update_fields(self, props)
+      self.modifier.fixed_width, self.modifier.fixed_height = self.width, self.height
+      self.modifier.pointer_enabled = self.interactive
+      self.header:update({alpha = self.text_alpha, hover_alpha = self.hover_alpha,
+        interactive = self.interactive})
+      for index, option in ipairs(hdr_options) do
+        self.rows[index]:update({interactive = self.interactive,
+          text_alpha = self.text_alpha, secondary_alpha = self.secondary_alpha,
+          hover_alpha = self.hover_alpha,
+          value = hdr_choice_label(self.values[option.name])})
+      end
+    end
+    function node:measure(parent)
+      return apply_modifier_size(self.modifier, {w = self.width, h = self.height}, parent)
+    end
+    function node:draw(ass, bounds)
+      draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2,
+        dp(30), "#050708", self.panel_alpha)
+      draw_node(self.header, ass, Rect({x = bounds.x, y = bounds.y,
+        w = bounds.w, h = dp(56)}))
+      local y = bounds.y + dp(60)
+      for _, row in ipairs(self.rows) do
+        draw_node(row, ass, Rect({x = bounds.x + dp(8), y = y,
+          w = bounds.w - dp(16), h = dp(44)}))
+        y = y + dp(44)
       end
     end
     return node
@@ -1307,6 +1406,7 @@ end
     })
     node.speed = SpeedPopup(function() set_settings_page("root") end)
     node.subtitle_style = SubtitleStylePopup(function() set_settings_page("subtitles") end)
+    node.video_hdr = HdrSettingsPopup(function() set_settings_page("video_settings") end)
     node.video_settings = VideoSettingsPopup(function()
       set_settings_page("video")
     end)
@@ -1426,6 +1526,8 @@ end
         page_props.saturation = self.video_saturation
         page_props.rotation = self.video_rotation
         page_props.shader_count = #self.shader_items
+        page_props.hdr = self.video_is_hdr and
+          hdr_choice_label(self.video_hdr_values["tone-mapping"]) or false
         self.video_settings:update(page_props)
       elseif settings_state.page == "video_crop" then
         page_props.selected = self.video_crop_selected
@@ -1436,6 +1538,9 @@ end
       elseif settings_state.page == "video_shaders" then
         page_props.items = self.shader_items
         self.video_shaders:update(page_props)
+      elseif settings_state.page == "video_hdr" then
+        page_props.values = self.video_hdr_values
+        self.video_hdr:update(page_props)
       end
     end
     function node:measure(parent)
@@ -1468,6 +1573,7 @@ end
       if settings_state.page == "video_shaders" then
         page = self.video_shaders
       end
+      if settings_state.page == "video_hdr" then page = self.video_hdr end
       if page then
         push_clip(bounds)
         page:draw(ass, bounds)
@@ -1588,7 +1694,8 @@ end
         local desired_w = wide_page and dp(420) or
           ((settings_state.page == "video_crop" or
               settings_state.page == "video_aspect") and dp(400) or
-            (settings_state.page == "video_settings" and dp(380) or dp(320)))
+            ((settings_state.page == "video_settings" or
+              settings_state.page == "video_hdr") and dp(380) or dp(320)))
         local target_w = math.max(dp(300), math.min(desired_w, viewport.w - dp(24)))
         local item_count = 0
         if settings_state.page == "video" then item_count = #video_items
@@ -1607,7 +1714,9 @@ end
           desired_h = dp(308)
         elseif settings_state.page == "speed" then desired_h = dp(190)
         elseif settings_state.page == "subtitle_style" then desired_h = dp(332)
-        elseif settings_state.page == "video_settings" then desired_h = dp(332)
+        elseif settings_state.page == "video_settings" then
+          desired_h = snapshot.video_is_hdr and dp(376) or dp(332)
+        elseif settings_state.page == "video_hdr" then desired_h = dp(200)
         elseif settings_state.page == "video_crop" or
           settings_state.page == "video_aspect" then desired_h = dp(164)
         elseif settings_state.page == "video_shaders" and item_count == 0 then
@@ -1688,6 +1797,8 @@ end
         props.video_saturation = snapshot.video_saturation or 0
         props.video_rotation = snapshot.video_rotation or 0
         props.shader_items = snapshot.shader_items or {}
+        props.video_is_hdr = snapshot.video_is_hdr == true
+        props.video_hdr_values = snapshot.video_hdr_values or {}
         popup:update(props)
       end
     })
