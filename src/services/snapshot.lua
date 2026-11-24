@@ -205,6 +205,15 @@ function snapshot.reader(deps)
           label = label,
           language = track.lang
         }
+        -- closed captions found in the video stream get selected after
+        -- loading without a sid change, so follow the track's selection
+        if track.selected then
+          if track["main-selection"] == 1 then
+            secondary_subtitle_id = tonumber(track.id) or secondary_subtitle_id
+          else
+            subtitle_id = tonumber(track.id) or subtitle_id
+          end
+        end
       elseif track.type == "audio" then
         local label = track.title
         if type(label) ~= "string" or label:match("^%s*$") then
