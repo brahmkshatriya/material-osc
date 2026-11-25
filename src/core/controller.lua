@@ -63,7 +63,9 @@ function controller.new(args)
       end
       runtime.controller.hide_deadline = nil
       self:update_mouse()
-      if self:interaction_requires_visibility() then
+      -- stay up while the pointer rests on the controls, not only while
+      -- something is being dragged or a menu is open
+      if self:should_show_at_pointer() then
         self:arm_hide_timer()
         return
       end
