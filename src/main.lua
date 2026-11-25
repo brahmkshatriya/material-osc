@@ -1117,6 +1117,7 @@ end
 local animation_coordinator = animation_coordinator_module.new({
   runtime = runtime, mouse_in = mouse_in, tooltip = tooltip_service,
   empty_state_visible = function() return app.empty_visible end,
+  horizontal_volume = function() return opts.volume_slider == "horizontal" end,
   show_window_controls_with_controller = function()
     return opts.show_on_mouse_move
   end,

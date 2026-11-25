@@ -80,6 +80,11 @@ function animation_coordinator.new(args)
   end
 
   function service:render_mode()
+    -- a horizontal volume slider moves the time display, which is laid out
+    -- with the rest of the controls
+    if runtime.volume.animation:is_running() and args.horizontal_volume() then
+      return "full"
+    end
     if runtime.playlist.controls_opacity:is_running() or
       runtime.controller.opacity:is_running() then
       return "visual"
