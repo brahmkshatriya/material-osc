@@ -694,7 +694,7 @@ end
 
   local function SubtitleStylePopup(on_back)
     local node = {
-      width = dp(360), height = dp(332), interactive = false,
+      width = dp(360), height = dp(376), interactive = false,
       panel_alpha = "00", text_alpha = "00", secondary_alpha = "00",
       hover_alpha = "00", delay_value = 0, font_size = 38, border_size = 1.65,
       position = 100,
@@ -704,12 +704,14 @@ end
       })
     }
     local function reset_subtitle_style()
-      mp.set_property_number("sub-delay", 0)
-      mp.set_property_number("sub-font-size", 38)
-      mp.set_property_number("sub-outline-size", 1.65)
-      mp.set_property("sub-color", "#FFFFFFFF")
-      mp.set_property("sub-font", "sans-serif")
+      local defaults = services.subtitle_defaults
+      mp.set_property_number("sub-delay", defaults.delay)
+      mp.set_property_number("sub-font-size", defaults.font_size)
+      mp.set_property_number("sub-outline-size", defaults.border)
+      mp.set_property("sub-color", defaults.color)
+      mp.set_property("sub-font", defaults.font)
       services.subtitle_position:set_baseline(services.subtitle_position.configured)
+      mp.set_property_number("secondary-sub-pos", defaults.secondary_position)
       render()
     end
     node.header = ChapterHeader(on_back, "Subtitle Settings", "arrow_back", {
@@ -738,8 +740,15 @@ end
       position:set_baseline(clamp(position.baseline + step, 0, 150))
       render() -- sub-pos isn't observed, so redraw to show the new value
     end
-    node.height_row = SubtitleAdjustRow("subtitle-height", "Height",
+    local function move_secondary(step)
+      local position = mp.get_property_number("secondary-sub-pos", 0)
+      mp.set_property_number("secondary-sub-pos", clamp(position + step, 0, 150))
+      render()
+    end
+    node.height_row = SubtitleAdjustRow("subtitle-height", "Primary height",
       function() move_subtitles(1) end, function() move_subtitles(-1) end)
+    node.secondary_height_row = SubtitleAdjustRow("subtitle-secondary-height",
+      "Secondary height", function() move_secondary(1) end, function() move_secondary(-1) end)
     node.border = SubtitleAdjustRow("subtitle-border", "Border",
       function()
         mp.set_property_number("sub-outline-size", clamp(node.border_size - 0.5, 0, 10))
@@ -777,6 +786,8 @@ end
       common.value = string.format("%g", self.font_size); self.font_size_row:update(common)
       self.position = services.subtitle_position.baseline
       common.value = string.format("%g", 100 - self.position); self.height_row:update(common)
+      common.value = string.format("%g", 100 - mp.get_property_number("secondary-sub-pos", 0))
+      self.secondary_height_row:update(common)
       common.value = string.format("%g", self.border_size); self.border:update(common)
       local color_name = normalize_subtitle_color(self.color)
       for _, item in ipairs(subtitle_colors) do
@@ -792,8 +803,8 @@ end
       draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2,
         dp(30), "#050708", self.panel_alpha)
       draw_node(self.header, ass, Rect({x = bounds.x, y = bounds.y, w = bounds.w, h = dp(56)}))
-      local rows = {self.delay, self.font_size_row, self.height_row, self.border,
-        self.color_row, self.font_row}
+      local rows = {self.delay, self.font_size_row, self.height_row,
+        self.secondary_height_row, self.border, self.color_row, self.font_row}
       local y = bounds.y + dp(60)
       for _, row in ipairs(rows) do
         draw_node(row, ass, Rect({x = bounds.x + dp(8), y = y,
@@ -1713,7 +1724,7 @@ end
         if settings_state.page == "root" then
           desired_h = dp(308)
         elseif settings_state.page == "speed" then desired_h = dp(190)
-        elseif settings_state.page == "subtitle_style" then desired_h = dp(332)
+        elseif settings_state.page == "subtitle_style" then desired_h = dp(376)
         elseif settings_state.page == "video_settings" then
           desired_h = snapshot.video_is_hdr and dp(376) or dp(332)
         elseif settings_state.page == "video_hdr" then desired_h = dp(200)

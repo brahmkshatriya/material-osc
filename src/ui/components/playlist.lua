@@ -69,10 +69,19 @@ function playlist.new(services, trailing)
         render()
       end
     })
+    -- removes the entry from the playlist only; the file is not touched
+    node.remove = ui.IconButton({
+      name = "playlist-remove-" .. tostring(slot), icon = "delete",
+      tooltip = "Remove from Playlist", icon_size = 20, horizontal_padding = 6,
+      on_click = function()
+        if node.index then mp.commandv("playlist-remove", node.index - 1) end
+      end
+    })
 
     function node:update(props)
       for key, value in pairs(props) do self[key] = value end
       self.modifier.pointer_enabled = self.interactive and self.item ~= nil
+      self.remove:update({alpha = self.text_alpha})
     end
     function node:measure(parent)
       if not self.item then return {w = 0, h = 0} end
@@ -103,9 +112,14 @@ function playlist.new(services, trailing)
       local title = self.item.title or ("Item " .. tostring(self.index))
       local title_x = bounds.x + dp(68)
       title = truncate_to_width(title,
-        math.max(0, bounds.x2 - dp(16) - title_x), 22)
+        math.max(0, bounds.x2 - dp(hovered and 52 or 16) - title_x), 22)
       draw_text(ass, title_x, bounds.y + bounds.h / 2,
         title, 22, "#FFFFFF", self.text_alpha, default_text_font, 4)
+      if hovered and not playlist_state.drag_from then
+        local size = measure_node(self.remove, bounds)
+        draw_node(self.remove, ass, Rect({x = bounds.x2 - dp(8) - size.w,
+          y = bounds.y + (bounds.h - size.h) / 2, w = size.w, h = size.h}))
+      end
     end
     return node
   end
