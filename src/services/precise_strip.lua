@@ -265,11 +265,14 @@ function precise_strip.new(args)
   mp.register_event("shutdown", reset_cache)
 
   -- files of earlier sessions can survive when mpv quit while a chunk was
-  -- still being written (Windows cannot delete an open file)
-  for _, name in ipairs(utils.readdir(temp_dir, "files") or {}) do
-    local owner = name:match("^material%-osc%-strip%-(%d+)%-")
-    if owner and owner ~= pid then os.remove(utils.join_path(temp_dir, name)) end
-  end
+  -- still being written (Windows cannot delete an open file); clean up a bit
+  -- later, as listing the temp folder slows down startup
+  mp.add_timeout(3, function()
+    for _, name in ipairs(utils.readdir(temp_dir, "files") or {}) do
+      local owner = name:match("^material%-osc%-strip%-(%d+)%-")
+      if owner and owner ~= pid then os.remove(utils.join_path(temp_dir, name)) end
+    end
+  end)
 
   return service
 end

@@ -17,28 +17,33 @@ local config_watcher
 local normalize_option_values
 do -- a block keeps these out of main.lua's 200-local limit
   -- accent_color=system follows the Windows accent color, read once per start
-  local system_accent
+  local system_accent, opts_follow_system
   local function windows_accent()
     if system_accent then return system_accent end
     system_accent = option_defaults.accent_color
     if package.config:sub(1, 1) ~= "\\" then return system_accent end
-    local result = mp.command_native({name = "subprocess", playback_only = false,
+    -- read in the background: mpv waits for scripts to load before opening its window
+    mp.command_native_async({name = "subprocess", playback_only = false,
       capture_stdout = true, args = {"reg", "query",
-        "HKCU\\Software\\Microsoft\\Windows\\DWM", "/v", "AccentColor"}})
-    local abgr = result and result.status == 0 and
-      (result.stdout or ""):match("AccentColor%s+REG_DWORD%s+0x(%x+)")
-    if abgr then
+        "HKCU\\Software\\Microsoft\\Windows\\DWM", "/v", "AccentColor"}}, function(_, result)
+      local abgr = result and result.status == 0 and
+        (result.stdout or ""):match("AccentColor%s+REG_DWORD%s+0x(%x+)")
+      if not abgr then return end
       abgr = string.format("%08x", tonumber(abgr, 16))
       system_accent = "#" .. abgr:sub(7, 8) .. abgr:sub(5, 6) .. abgr:sub(3, 4)
       msg.verbose("accent_color follows the Windows accent: " .. system_accent)
-    end
+      if opts_follow_system then
+        opts.accent_color = system_accent
+        if options_update_handler then options_update_handler({accent_color = true}) end
+      end
+    end)
     return system_accent
   end
   normalize_option_values = function(values)
     config_schema.normalize(values)
-    if tostring(values.accent_color):lower() == "system" then
-      values.accent_color = windows_accent()
-    end
+    local system = tostring(values.accent_color):lower() == "system"
+    if values == opts then opts_follow_system = system end
+    if system then values.accent_color = windows_accent() end
     return values
   end
 end
