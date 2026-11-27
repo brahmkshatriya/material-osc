@@ -240,7 +240,7 @@ function snapshot.reader(deps)
                 native_item.details:match("([%d%.]+) fps$")
               item.fps = tonumber(fps) or item.fps
             end
-            item.label = friendly_quality_label(item.height, item.fps)
+            item.label = friendly_quality_label(item.height, item.fps, item.width)
             break
           end
         end

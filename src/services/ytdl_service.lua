@@ -1,10 +1,24 @@
 local ytdl_service = {}
 
-local function quality_label(height, fps)
+-- YouTube names a quality by the 16:9 tier it fills along its long side, so
+-- 2560x1280 is 1440p and a 1080x1920 short is 1080p
+local tiers = {144, 240, 360, 480, 720, 1080, 1440, 2160, 4320}
+local function quality_tier(width, height)
+  if width <= 0 then return height end
+  local size = math.max(math.min(width, height), math.max(width, height) * 9 / 16)
+  local nearest = tiers[1]
+  for _, tier in ipairs(tiers) do
+    if math.abs(tier - size) < math.abs(nearest - size) then nearest = tier end
+  end
+  return nearest
+end
+
+local function quality_label(height, fps, width)
   height, fps = tonumber(height) or 0, tonumber(fps) or 0
+  if height > 0 then height = quality_tier(tonumber(width) or 0, height) end
   local label = height > 0 and (tostring(height) .. "p") or "Video"
-  if height == 2160 then label = label .. " (4K)"
-  elseif height == 4320 then label = label .. " (8K)" end
+  local badge = ({[1080] = "HD", [1440] = "2K", [2160] = "4K", [4320] = "8K"})[height]
+  if badge then label = label .. " (" .. badge .. ")" end
   if fps > 30 then label = label .. " " .. tostring(math.floor(fps + 0.5)) .. "fps" end
   return label
 end
@@ -165,7 +179,7 @@ function ytdl_service.new(args)
         local items = {}
         for key, entry in pairs(best) do
           items[#items + 1] = {id = "ytdl:" .. key,
-            label = quality_label(entry.height, entry.fps),
+            label = quality_label(entry.height, entry.fps, entry.width),
             stream_quality = true, source = "youtube",
             selector = entry.has_audio and entry.format_id or
               (entry.format_id .. "+bestaudio/best"),
