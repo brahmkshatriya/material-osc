@@ -99,6 +99,7 @@ aspect ratio, and disables automatic window resizing between files; see
 | --- | --- | --- | --- |
 | `mouse_timeout` | `2` | Seconds; `0` disables timeout | Controls how long the UI remains visible after pointer activity. |
 | `show_on_mouse_move` | `no` | `yes`, `no` | With `yes`, movement anywhere reveals the UI. With `no`, use the bottom edge for playback controls or the top edge for window controls. |
+| `keep_controls_on_hover` | `no` | `yes`, `no` | With `yes`, the controls stay up while the pointer rests on them instead of hiding after `mouse_timeout`. |
 | `single_click_actions_enabled` | `yes` | `yes`, `no` | Enables single-click play/pause and left/right edge seeking. Double-click fullscreen remains available when disabled. |
 | `drag_border` | `16` | Pixels; `0` disables the band | Width of the band along the window edges that drags the window, also over controls. Elsewhere the window drags from empty space and the video, but not from buttons, sliders or open menus. |
 | `seeking_zone_percentage` | `15` | `0`–`50` | Sets each fast-seek zone's width as a percentage of the window. |

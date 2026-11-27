@@ -59,6 +59,7 @@ local definitions = {
 
   {name = "mouse_timeout", default = 2, group = "behavior"},
   {name = "show_on_mouse_move", default = false, group = "behavior"},
+  {name = "keep_controls_on_hover", default = false, group = "behavior"},
   {name = "single_click_actions_enabled", default = true, group = "behavior"},
   {name = "drag_border", default = 16, group = "behavior",
     normalize = number({default = 16, min = 0})},
