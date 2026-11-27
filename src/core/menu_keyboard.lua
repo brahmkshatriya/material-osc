@@ -113,6 +113,7 @@ function menu_keyboard.new(args)
       return #(runtime.ytdl.caption_items or {})
     end
     if page == "video_shaders" then return #(snapshot.shader_items or {}) end
+    if page == "audio_devices" then return #(snapshot.audio_device_items or {}) end
     return 0
   end
 

@@ -1082,6 +1082,11 @@ playback_indicator = playback_indicator_module.new({
 toast_service:bind(playback_indicator)
 services.playback_indicator = playback_indicator
 services.loading = {draw = draw_loading_shape_morph}
+-- audio settings at start (from mpv.conf, else mpv's defaults), for reset
+services.audio_defaults = {
+  delay = mp.get_property_number("audio-delay", 0),
+  device = mp.get_property("audio-device", "auto")
+}
 local temporary_speed = temporary_speed_module.new({
   state = runtime.temporary_speed,
   mp = mp,

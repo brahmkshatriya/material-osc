@@ -1212,6 +1212,63 @@ end
     return node
   end
 
+  local function AudioSettingsPopup(on_back)
+    local node = {
+      width = dp(320), height = dp(156), interactive = false,
+      panel_alpha = "00", text_alpha = "00", secondary_alpha = "00",
+      hover_alpha = "00", delay = 0, device = "",
+      modifier = Modifier():clickable({
+        name = "audio-settings-panel", enabled = false, on_click = function() end
+      })
+    }
+    -- rounded to whole ms so repeated steps don't drift
+    local function shift_delay(step)
+      local delay = math.floor((node.delay + step) * 1000 + 0.5) / 1000
+      mp.set_property_number("audio-delay", clamp(delay, -10, 10))
+    end
+    node.header = ChapterHeader(on_back, "Audio Settings", "arrow_back", {
+      name = "audio-settings-reset", icon = "restart_alt",
+      tooltip = "Reset Audio Settings",
+      on_click = function()
+        mp.set_property_number("audio-delay", services.audio_defaults.delay)
+        mp.set_property("audio-device", services.audio_defaults.device)
+      end
+    })
+    node.delay_row = SubtitleAdjustRow("audio-settings-delay", "Delay",
+      function() shift_delay(-0.05) end, function() shift_delay(0.05) end)
+    node.device_row = SettingsActionRow("audio-settings-device", "speaker",
+      function() set_settings_page("audio_devices") end)
+    function node:update(props)
+      update_fields(self, props)
+      self.modifier.fixed_width, self.modifier.fixed_height = self.width, self.height
+      self.modifier.pointer_enabled = self.interactive
+      self.header:update({alpha = self.text_alpha, hover_alpha = self.hover_alpha,
+        interactive = self.interactive})
+      local common = {interactive = self.interactive, text_alpha = self.text_alpha,
+        secondary_alpha = self.secondary_alpha, hover_alpha = self.hover_alpha}
+      common.value = string.format("%+d ms", math.floor(self.delay * 1000 + 0.5))
+      self.delay_row:update(common)
+      common.label, common.value = "Device", self.device
+      self.device_row:update(common)
+    end
+    function node:measure(parent)
+      return apply_modifier_size(self.modifier, {w = self.width, h = self.height}, parent)
+    end
+    function node:draw(ass, bounds)
+      draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2,
+        dp(30), "#050708", self.panel_alpha)
+      draw_node(self.header, ass, Rect({x = bounds.x, y = bounds.y,
+        w = bounds.w, h = dp(56)}))
+      local y = bounds.y + dp(60)
+      for _, row in ipairs({self.delay_row, self.device_row}) do
+        draw_node(row, ass, Rect({x = bounds.x + dp(8), y = y,
+          w = bounds.w - dp(16), h = dp(44)}))
+        y = y + dp(44)
+      end
+    end
+    return node
+  end
+
   local function SettingsPopup(on_close)
     local node = {
       width = dp(480), height = dp(260), interactive = false,
@@ -1255,6 +1312,11 @@ end
     })
     node.audio = TrackPopup(function() set_settings_page("root") end, {
       name = "settings-audio", title = "Audio", action_icon = "arrow_back",
+      right_action = {
+        name = "settings-audio-options", icon = "tune",
+        tooltip = "Audio Settings",
+        on_click = function() set_settings_page("audio_settings") end
+      },
       state = settings_state,
       on_select = function(item)
         if item.id == 0 then mp.set_property("aid", "no")
@@ -1321,6 +1383,12 @@ end
     node.video_settings = VideoSettingsPopup(function()
       set_settings_page("video")
     end)
+    node.audio_settings = AudioSettingsPopup(function() set_settings_page("audio") end)
+    node.audio_devices = TrackPopup(function() set_settings_page("audio_settings") end, {
+      name = "settings-audio-devices", title = "Audio Device",
+      action_icon = "arrow_back", state = settings_state,
+      on_select = function(item) mp.set_property("audio-device", item.id) end
+    })
     node.video_crop = VideoCropPopup(function() set_settings_page("root") end)
     node.video_aspect = VideoAspectPopup(function()
       set_settings_page("video_crop")
@@ -1447,6 +1515,16 @@ end
       elseif settings_state.page == "video_shaders" then
         page_props.items = self.shader_items
         self.video_shaders:update(page_props)
+      elseif settings_state.page == "audio_settings" then
+        page_props.delay, page_props.device = self.audio_delay, self.audio_device
+        for _, item in ipairs(self.audio_device_items or {}) do
+          if item.id == self.audio_device then page_props.device = item.label end
+        end
+        self.audio_settings:update(page_props)
+      elseif settings_state.page == "audio_devices" then
+        page_props.items = self.audio_device_items or {}
+        page_props.active_id = self.audio_device
+        self.audio_devices:update(page_props)
       end
     end
     function node:measure(parent)
@@ -1479,6 +1557,8 @@ end
       if settings_state.page == "video_shaders" then
         page = self.video_shaders
       end
+      if settings_state.page == "audio_settings" then page = self.audio_settings end
+      if settings_state.page == "audio_devices" then page = self.audio_devices end
       if page then
         push_clip(bounds)
         page:draw(ass, bounds)
@@ -1595,7 +1675,8 @@ end
         local wide_page = settings_state.page == "subtitles" or
           settings_state.page == "secondary_subtitles" or
           settings_state.page == "auto_captions" or
-          settings_state.page == "video_shaders"
+          settings_state.page == "video_shaders" or
+          settings_state.page == "audio_devices"
         local desired_w = wide_page and dp(420) or
           ((settings_state.page == "video_crop" or
               settings_state.page == "video_aspect") and dp(400) or
@@ -1612,6 +1693,8 @@ end
           item_count = #ytdl_state.caption_items
         elseif settings_state.page == "video_shaders" then
           item_count = #(snapshot.shader_items or {})
+        elseif settings_state.page == "audio_devices" then
+          item_count = #(snapshot.audio_device_items or {})
         end
         local desired_h
         if settings_state.page == "root" then
@@ -1623,6 +1706,7 @@ end
           settings_state.page == "video_aspect" then desired_h = dp(164)
         elseif settings_state.page == "video_shaders" and item_count == 0 then
           desired_h = dp(116)
+        elseif settings_state.page == "audio_settings" then desired_h = dp(156)
         else
           local has_footer = settings_state.page == "subtitles" or
             settings_state.page == "secondary_subtitles" or
@@ -1635,7 +1719,8 @@ end
           settings_state.page == "subtitles" or
           settings_state.page == "secondary_subtitles" or
           settings_state.page == "auto_captions" or
-          settings_state.page == "video_shaders" then
+          settings_state.page == "video_shaders" or
+          settings_state.page == "audio_devices" then
           local whole_rows = math.max(1, math.floor((max_h - dp(68)) / dp(48)))
           max_h = dp(68) + whole_rows * dp(48)
         end
@@ -1699,6 +1784,9 @@ end
         props.video_saturation = snapshot.video_saturation or 0
         props.video_rotation = snapshot.video_rotation or 0
         props.shader_items = snapshot.shader_items or {}
+        props.audio_delay = snapshot.audio_delay or 0
+        props.audio_device = snapshot.audio_device or "auto"
+        props.audio_device_items = snapshot.audio_device_items or {}
         popup:update(props)
       end
     })

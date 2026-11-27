@@ -278,6 +278,15 @@ function snapshot.reader(deps)
       end
     end
 
+    local audio_device_items = {}
+    for _, device in ipairs(property_native("audio-device-list", {}) or {}) do
+      if type(device) == "table" and device.name then
+        audio_device_items[#audio_device_items + 1] = {
+          id = device.name, label = device.description or device.name
+        }
+      end
+    end
+
     return {
       duration = duration,
       position = position,
@@ -319,6 +328,9 @@ function snapshot.reader(deps)
       secondary_subtitle_id = secondary_subtitle_id,
       audio_items = audio_items,
       audio_id = audio_id,
+      audio_delay = property_number("audio-delay", 0) or 0,
+      audio_device = property("audio-device", "auto") or "auto",
+      audio_device_items = audio_device_items,
       chapter_name = chapter_name,
       time_text = displayed_time .. " / " .. format_time(displayed_duration),
       buffering = is_buffering(),

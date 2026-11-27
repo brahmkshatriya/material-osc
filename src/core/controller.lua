@@ -479,7 +479,8 @@ function controller.new(args)
       local state = runtime[name]
       if state.open and state.bounds and args.mouse_in(state.bounds) and
         (name ~= "settings" or state.page == "video" or state.page == "audio" or
-          state.page == "subtitles" or state.page == "auto_captions") then
+          state.page == "subtitles" or state.page == "auto_captions" or
+          state.page == "audio_devices") then
         state.scroll_index = math.max(0, state.scroll_index + direction)
         args.render(); self:show()
         return true
