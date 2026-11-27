@@ -1,0 +1,12 @@
+- Customize the right-click menu with your own commands, submenus, and Material Symbols. Open Right-click → Customize to edit `material-osc-menu.conf`.
+- Adjust tone mapping, gamut mapping, and peak detection in Video Settings when playing HDR video.
+- Adjust primary and secondary subtitle heights independently. Reset restores the subtitle settings from your mpv configuration. The subtitle button now reflects embedded closed captions.
+- Keep the controls visible while the pointer rests on them with `keep_controls_on_hover`, open the volume slider sideways with `volume_slider=horizontal`, or follow the Windows accent color with `accent_color=system`.
+- Remove entries from the playlist using the button that appears when you hover over a row. The media files stay on disk.
+- Audio track labels show the channel layout. YouTube quality choices load sooner, use clearer labels for non-16:9 videos, and leave Settings usable while a quality switch is in progress.
+- Improved mpv startup and local file loading. Title detection with GuessIt now runs in the background and can be disabled with `guessit=no`.
+- Fixed missed rapid clicks and window movement while dragging sliders in mpv.net, clicks intercepted by edge seeking, and fullscreen behavior in borderless windows.
+- Fixed the loading indicator flashing during quick seeks, quality detection when the video output is scaled, and the hover shape for a standalone playlist button.
+- Added a Nix flake, Home Manager installation instructions, and GPLv3 licensing for material-osc.
+
+- Thanks to @Salah242222, @SifeYassine, and @Irgendeinwer for their contributions.

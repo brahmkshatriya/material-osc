@@ -24,9 +24,10 @@ jobs:
         run: |
           test -f "updates/$GITHUB_REF_NAME.txt"
           python3 bundle.py "$GITHUB_REF_NAME"
+          cp LICENSE.md "build/$GITHUB_REF_NAME/material-osc-LICENSE.md"
           cd "build/$GITHUB_REF_NAME"
           zip -r "$GITHUB_WORKSPACE/material-osc.zip" \
-            fonts scripts
+            fonts scripts material-osc-LICENSE.md
 
       - name: Prepare release description
         shell: bash

@@ -145,8 +145,8 @@ function menu_builder.new(args)
     local tags = {}
     local start = command:find("#@", 1, true)
     if not start then return tags end
-    for tag in (command:sub(start) .. "#@"):gmatch("#@(.-)%s*#@") do
-      tag = trim(tag)
+    for raw_tag in (command:sub(start) .. "#@"):gmatch("#@(.-)%s*#@") do
+      local tag = trim(raw_tag)
       if tag ~= "" then tags[#tags + 1] = tag end
     end
     return tags
@@ -169,8 +169,8 @@ function menu_builder.new(args)
   local function parse(content)
     root, tagged, by_tag = {}, {}, {}
     local named = {}
-    for line in content:gsub("^\239\187\191", ""):gmatch("[^\r\n]+") do
-      line = trim(line)
+    for raw_line in content:gsub("^\239\187\191", ""):gmatch("[^\r\n]+") do
+      local line = trim(raw_line)
       if line ~= "" and line:sub(1, 1) ~= "#" then
         local title, icon, command = line:match("^(.-)|(.-)|(.*)$")
         if not title then title, icon = line:match("^(.-)|(.*)$") end
