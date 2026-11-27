@@ -15,6 +15,42 @@ I would say, you should fuck around and find out!
 
 https://github.com/user-attachments/assets/65046da7-7d9e-4492-9e93-47650b8fc484
 
+## Installation
+
+See [INSTALLATION.md](INSTALLATION.md) or grab `material-osc.zip` from the [latest release](https://github.com/brahmkshatriya/material-osc/releases/latest).
+
+<details>
+<summary>Nix / NixOS (Flake & Home Manager)</summary>
+
+Try `material-osc` directly without installing:
+
+```bash
+nix run github:brahmkshatriya/material-osc -- path/to/video.mp4
+```
+
+To install declaratively with **Home Manager**:
+
+```nix
+# flake.nix
+inputs.material-osc = {
+  url = "github:brahmkshatriya/material-osc";
+  inputs.nixpkgs.follows = "nixpkgs";
+};
+
+# home.nix
+programs.mpv = {
+  enable = true;
+  scripts = [
+    inputs.material-osc.packages.${pkgs.stdenv.hostPlatform.system}.default
+    pkgs.mpvScripts.thumbfast
+  ];
+};
+```
+
+Or via the flake overlay (`inputs.material-osc.overlays.default`), which exposes `pkgs.mpvScripts.material-osc`.
+
+</details>
+
 ## Configuration
 
 material-osc can be customized with a `material-osc.conf` file in mpv's
