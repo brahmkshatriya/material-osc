@@ -210,6 +210,7 @@ function update_service.new(args)
   end
 
   function service:check()
+    if tostring(args.script_path or ""):match("^/nix/store/") then return end
     local mode, last_check = read_preferences()
     state.mode, state.last_check = mode, last_check
     local source_marker = "__MATERIAL_" .. "OSC_VERSION__"
